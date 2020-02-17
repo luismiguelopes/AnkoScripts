@@ -15,7 +15,7 @@ fsMade = 0
 
 //////////////////////////////////////
 
-SendTelegram(telegramId, "CR7doOGame  ("+UniverseName+"|"+Language+") ::: Moons To Planets Started" )
+SendTelegram(telegramId, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: Moons To Planets Started" )
 
 moons = GetCachedMoons()
     for moon in moons {
