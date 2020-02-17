@@ -1,0 +1,22 @@
+
+
+galaxy = 5
+minSystem = 1
+maxSystem = 499
+
+for system = minSystem; system <= maxSystem; system++ {
+
+systemInfos, _ = GalaxyInfos(galaxy, system)
+planetInfo = systemInfos.ExpeditionDebris
+
+if (planetInfo.PathfindersNeeded > 70) {
+    
+   LogWarn("Coord:  " + galaxy + ":" + system + "| DebrisM:" + planetInfo.Metal + "| DebrisC:" + planetInfo.Crystal  + "| PathFinder:" + planetInfo.PathfindersNeeded)
+   SendTelegram(TELEGRAM_CHAT_ID, "Coord:  " + galaxy + ":" + system + "| DebrisM:" + planetInfo.Metal + "| DebrisC:" + planetInfo.Crystal  + "| PathFinder:" + planetInfo.PathfindersNeeded)
+}
+
+Sleep(Random(500, 2000))
+
+}
+
+
