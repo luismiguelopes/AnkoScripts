@@ -1,0 +1,30 @@
+
+//SETTINGS----------------------------------------------------------------------
+
+shipsDesired = 500
+checkInterval = 10 
+
+
+//SETTINGS DONE-----------------------------------------------------------------
+
+
+Planets = GetPlanets()
+for{
+    for planet in Planets {
+        celestial = GetCachedCelestial(planet.Coordinate)
+        allShips, _ = celestial.GetShips()
+        
+        shipType = allShips.LargeCargo
+        capsShipType = LARGECARGO
+        nrShips = shipsDesired - shipType
+        
+        
+        //Only build when no ships already being build
+        productionLine = GetProduction(planet.ID)[0]
+        if(len(productionLine) == 0 && shipType < shipsDesired){
+            celestial.Build(capsShipType, nrShips)
+            print("Build: " +nrShips+ " " + capsShipType + " on: "+planet.Coordinate)
+        }
+    }
+   Sleep(checkInterval * 60 * 1000) 
+}
