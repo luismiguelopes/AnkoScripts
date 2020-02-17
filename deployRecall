@@ -1,0 +1,48 @@
+//////////////////////////////////////
+// Change these settings to your own.
+ // Telegram ID
+telegramId = TELEGRAM_CHAT_ID
+ 
+sendFrom = GetHomeWorld() // Enter your moon you're sending from.
+sendTo = "M:5:259:14" // Enter your moon you're sending to.
+fleetSpeed = TEN_PERCENT                  // TWENTY_PERCENT ... HUNDRED_PERCENT (Set to whichever speed you desire)
+ 
+//////////////////////////////////////
+ 
+ 
+ 
+mainFleet = NewFleet()
+mainFleet.SetOrigin(sendFrom)
+mainFleet.SetDestination(sendTo)
+mainFleet.SetSpeed(fleetSpeed)
+mainFleet.SetMission(PARK)
+mainFleet.SetAllResources()
+mainFleet.SetAllShips()
+fleet, err = mainFleet.SendNow()
+
+
+
+half = fleet.ArriveIn / 4
+
+
+Print("Fleetsaving for: ", ShortDur((half * 2)))
+
+SendTelegram(telegramId, "CR7doOGame (Betelgeuse|pt) ::: FleetSave Main Fleet Started" )
+SendTelegram(telegramId, "Fleetsaving for: " + ShortDur((half * 2)) )
+
+
+Sleep(Random(half * 980, half * 1010))
+if !IsLoggedIn() {
+    Login()
+}
+(Sleep(Random(3,12)*1000))
+CancelFleet(fleet.ID)
+
+SendTelegram(telegramId, "CR7doOGame (Betelgeuse|pt) ::: Fleet Canceled ::: Sleep Tight" )
+
+(Sleep(Random(3,12)*1000))
+Logout()
+Sleep(Random(half * 800, half * 900))
+Login()
+
+SendTelegram(telegramId, "CR7doOGame (Betelgeuse|pt) ::: Hi, Let's Rock!" )
