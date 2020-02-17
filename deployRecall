@@ -1,5 +1,10 @@
 //////////////////////////////////////
 // Change these settings to your own.
+
+UserName = GetUserInfos().PlayerName
+UniverseName = GetUniverseName()
+Language = GetLanguage()
+
  // Telegram ID
 telegramId = TELEGRAM_CHAT_ID
  
@@ -27,7 +32,7 @@ half = fleet.ArriveIn / 4
 
 Print("Fleetsaving for: ", ShortDur((half * 2)))
 
-SendTelegram(telegramId, "CR7doOGame (Betelgeuse|pt) ::: FleetSave Main Fleet Started" )
+SendTelegram(telegramId, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: FleetSave Main Fleet Started" )
 SendTelegram(telegramId, "Fleetsaving for: " + ShortDur((half * 2)) )
 
 
@@ -38,11 +43,11 @@ if !IsLoggedIn() {
 (Sleep(Random(3,12)*1000))
 CancelFleet(fleet.ID)
 
-SendTelegram(telegramId, "CR7doOGame (Betelgeuse|pt) ::: Fleet Canceled ::: Sleep Tight" )
+SendTelegram(telegramId, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: Fleet Canceled ::: Sleep Tight" )
 
 (Sleep(Random(3,12)*1000))
 Logout()
 Sleep(Random(half * 800, half * 900))
 Login()
 
-SendTelegram(telegramId, "CR7doOGame (Betelgeuse|pt) ::: Hi, Let's Rock!" )
+SendTelegram(telegramId, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: Hi, Let's Rock!" )
