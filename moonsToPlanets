@@ -1,0 +1,48 @@
+//////////////////////////////////////
+// Change these settings to your own.
+
+//
+UniverseName = GetUniverseName()
+Language = GetLanguage()
+
+// Telegram ID
+telegramId = TELEGRAM_CHAT_ID
+
+// Init Global Variables
+fsMade = 0
+
+//////////////////////////////////////
+
+SendTelegram(telegramId, "CR7doOGame  ("+UniverseName+"|"+Language+") ::: Moons To Planets Started" )
+
+moons = GetCachedMoons()
+    for moon in moons {
+
+        resources, err = moon.GetResources()
+                origin = moon.Coordinate
+                destination = NewCoordinate(origin.Galaxy, origin.System, origin.Position, PLANET_TYPE)
+                fleet = NewFleet()
+                fleet.SetOrigin(origin)
+                Print(origin)
+                fleet.SetDestination(destination)
+                Print(destination)
+                fleet.SetMission(PARK)
+                fleet.AddShips(SMALLCARGO, 3000)
+                fleet, err = fleet.SendNow()
+               if err != nil {
+                   LogError(err)
+                   SendTelegram(telegramId, moon.Coordinate + " Error: " + err )
+                   Sleep(Random(1000, 3000))
+              } else {
+                    Print(fleet)
+                    SendTelegram(telegramId, "Origin: " + moon.Coordinate + " Destination: " + destination + " ::: Mission: Park" )
+                    fsMade = fsMade + 1
+                    Sleep(Random(1000, 5000))
+               }
+    }
+
+ SendTelegram(telegramId, "("+UniverseName+"|"+Language+") ::: Moons To Planets Finished Successfully!" )
+ SendTelegram(telegramId, "Transports Made: " +  fsMade)
+ 
+ Sleep(3*60*1000)
+ StartScript("planetsToMoons.ank")
