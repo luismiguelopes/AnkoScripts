@@ -1,0 +1,42 @@
+func moonsToPlanets() {
+StartScript("moonsToPlanets.ank")
+}
+
+
+
+func planetsToMoons() {
+StartScript("planetsToMoons.ank")
+}
+
+
+//////////////////////////////////////////////////////
+
+
+
+
+moonsToPlanets()
+Sleep(5*60*1000)
+
+if IsScriptRunning("moonsToPlanets.ank") == true {
+    
+    Sleep(5*60*1000)
+    
+}
+
+planetsToMoons()
+Sleep(5*60*1000)
+
+if IsScriptRunning("planetsToMoons.ank") == true {
+    
+    Sleep(5*60*1000)
+    
+}
+
+RepatriateNow()
+
+
+
+
+
+
+
