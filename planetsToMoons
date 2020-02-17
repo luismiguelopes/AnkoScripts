@@ -1,0 +1,52 @@
+//////////////////////////////////////
+// Change these settings to your own.
+
+UserName = GetUserInfos().PlayerName
+UniverseName = GetUniverseName()
+Language = GetLanguage()
+
+
+
+// Telegram ID
+telegramId = TELEGRAM_CHAT_ID
+
+// Init Global Variables
+fsMade = 0
+
+
+ 
+//////////////////////////////////////
+
+SendTelegram(telegramId, UserName+  " ("+UniverseName+"|"+Language+") ::: Planets To Moons Started" )
+
+planets = GetCachedPlanets()
+    for planet in planets {
+
+        resources, err = planet.GetResources()
+                origin = planet.Coordinate
+                destination = NewCoordinate(origin.Galaxy, origin.System, origin.Position, MOON_TYPE)
+                fleet = NewFleet()
+                fleet.SetOrigin(origin)
+                Print(origin)
+                fleet.SetDestination(destination)
+                Print(destination)
+                fleet.SetMission(PARK)
+                fleet.SetAllShips()
+                fleet.SetAllResources()
+                fleet, err = fleet.SendNow()
+               if err != nil {
+                   LogError(err)
+                   SendTelegram(telegramId, planet.Coordinate + " Error: " + err )
+                   Sleep(Random(700,3000))
+              } else {
+                    Print(fleet)
+                    SendTelegram(telegramId, "Origin: " + planet.Coordinate + " Destination: " + destination + " ::: Mission: PARK" )
+                    fsMade = fsMade + 1
+                    Sleep(Random(500,3000))
+               }
+    }
+
+ SendTelegram(telegramId, UserName+ "  ("+UniverseName+"|"+Language+")::: Planets To Moons Finished Successfully!" )
+ SendTelegram(telegramId, "Transports Made: " +  fsMade)
+Sleep(3*60*1000)
+ RepatriateNow()
