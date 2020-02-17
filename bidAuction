@@ -1,0 +1,142 @@
+
+//######################################## SETTINGS START ########################################
+
+highestBid = 2000000                //what is the maximum bid
+metBid = true                       //should you bid with metal?
+crysBid = false                     //should you bid with crystal?
+deutBid = false                     //should you bid with deuterium?
+bidHome = GetHomeWorld()             //from which planet should be bid?
+ownAlliance = ""
+
+//######################################## SETTINGS END ########################################
+
+
+ownPlayerID = GetCachedPlayer().PlayerID
+celt = GetCachedCelestial(bidHome)
+if celt == nil {
+    LogError(bidHome + " is not one of your planet/moon")
+    return
+}
+
+
+func allianceName() {
+
+x, _ = GetAuction()
+UserID = x.HighestBidderUserID
+GalaxyNumber =  GetPlayerCoordinates(UserID)[0].Galaxy
+SystemNumber = GetPlayerCoordinates(UserID)[0].System
+PositionNumber = GetPlayerCoordinates(UserID)[0].Position
+systemInfos, _ = GalaxyInfos(GalaxyNumber, SystemNumber)
+planetInfo = systemInfos.Position(PositionNumber)
+        if planetInfo.Alliance.Name == ownAlliance {
+            LogWarn("A member of your alliance already bid: " + x.HighestBidder)
+            return refreshTime(auc.Endtime)
+        }    
+    
+}
+
+
+
+
+
+
+func AucDo(ress) {
+    bid = {}
+    if metBid {
+        bid = { celt.GetID() : NewResources(ress, 0, 0) }
+    } else if crysBid {
+        bid = { celt.GetID() : NewResources(0, ress, 0) }
+    } else {
+        bid = { celt.GetID() : NewResources(0, 0, ress) }
+    }
+    return DoAuction(bid)
+}
+
+func refreshTime(TimeEnd) {
+    switch TimeEnd {     
+        case TimeEnd <= 300:                    //5 min
+        LogDebug("Only 5 min")
+        return Random(0, 1)
+
+        case TimeEnd <= 600:                    //10 min
+        LogDebug("Only 10 Min")                        
+        return Random(60, 120)
+
+        case TimeEnd <= 1800:                   //30 min
+        LogDebug("Only 30 Min")                        
+        return Random(180, 300)
+
+        case TimeEnd <= 3600:                   //60 min
+        LogDebug("Only 60 Min")                        
+        return Random(300, 600)
+
+        default:
+        LogError("Unknown TimeEnd value", TimeEnd)
+        return Random(5, 10)
+    }
+}
+
+func customSleep(sleepTime) {
+    if sleepTime <= 0 {
+        sleepTime = Random(5, 10)
+    }
+    LogInfo("Wait " + ShortDur(sleepTime))
+    Sleep(sleepTime * 1000)
+}
+
+func didWon(auc) {
+    if auc.HighestBidderUserID == ownPlayerID {
+        LogInfo("You won the auction with " + Dotify(auc.CurrentBid) + " resources!")
+        SendTelegram(TELEGRAM_CHAT_ID, "You won the auction with " + Dotify(auc.CurrentBid) + " resources!")
+    }
+}
+
+func processAuction() {
+    auc, err = GetAuction()
+    if err != nil {
+        LogError(err)
+        return Random(0, 1)
+    }
+    if auc.HasFinished {
+        if auc.Endtime > 7200 {
+            LogInfo("There is currently no auction")
+        } else {
+            LogInfo("Auction has finished")
+        }
+        didWon(auc)
+        return auc.Endtime + 10
+    }
+    if auc.HighestBidderUserID == ownPlayerID {
+        LogInfo("You are the highest bidder!")
+        return refreshTime(auc.Endtime)
+    }
+
+    if (auc.HighestBidderUserID != ownPlayerID) && (auc.NumBids != 0) {
+        
+        allianceName()
+
+
+    }    
+    
+    if auc.MinimumBid > highestBid {
+        LogInfo("Resources exceeded! Wait until the next auction!")
+        return auc.Endtime + 10
+    }
+
+    ress = auc.MinimumBid - auc.AlreadyBid
+    LogInfo("You are not the highest bidder! Bid " + Dotify(ress) + " resources!")
+    err = AucDo(ress)
+    if err != nil {
+        LogError(err)
+        return Random(0, 1)
+    }
+    return refreshTime(auc.Endtime)
+}
+
+func doWork() {
+    for { // forever process auctions
+        sleepTime = processAuction()
+        customSleep(sleepTime)
+    }
+}
+doWork()
