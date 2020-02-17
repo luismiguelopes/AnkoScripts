@@ -1,0 +1,30 @@
+///////////////////////////////////////////////////////
+UserName = GetUserInfos().PlayerName
+UniverseName = GetUniverseName()
+Language = GetLanguage()
+
+///////////////////////////////////////////////////////
+//Hours number
+x = 5
+
+
+///////////////////////////////////////////////////////
+
+func sleepLogout() {
+
+    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: Offline for: " +x+ " hours." )
+    Sleep(x*60*60*1000)
+    
+    
+}
+
+
+Logout()
+sleepLogout()
+Login()
+
+
+
+
+
+SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: Online" )
