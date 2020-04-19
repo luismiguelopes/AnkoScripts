@@ -1,0 +1,121 @@
+///////////////////////////////////////////////////////
+
+
+UserName = GetUserInfos().PlayerName
+UniverseName = GetUniverseName()
+Language = GetLanguage()
+
+
+///////////////////////////////////////////////////////
+
+//Sleep(5*60*1000)
+
+/* Setup *////////////////////////////////////////////////////////
+
+
+/*///////////////////////////////////////////////////////*
+*                                                        *
+*               GLOBAL VARIABLES                         *
+*                                                        *
+*/////////////////////////////////////////////////////// *
+
+
+
+func message() {
+SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ")" )
+SendTelegram(TELEGRAM_CHAT_ID, "" )
+SendTelegram(TELEGRAM_CHAT_ID, "/*///////////////////////////////////////////////////////* \n *                                                                                             *\n*                                       WARNING                                  *\n*                                                                                              *\n*/////////////////////////////////////////////////////// *")
+SendTelegram(TELEGRAM_CHAT_ID, "" )
+SendTelegram(TELEGRAM_CHAT_ID, "In order to properly run this script you need to sort your planets by date of colonization.\n This is Mandatory otherwise you probably will remove your old colonies that you might don't want.\n For security purposes the script will run after 5 minutes." )
+}
+
+func sentColonization() {
+origin = GetHomeWorld()
+
+destinationGalaxy = 3
+minSystem = 240
+maxSystem = 260
+
+minPosition = 7
+maxPosition = 9
+
+/*///////////////////////////////////////////////////////*
+*                                                        *
+*                   SCRIPT                               *
+*                                                        *
+*/////////////////////////////////////////////////////// *
+
+
+
+//SendTelegram(TELEGRAM_CHAT_ID, "Experimental: Advanced Colonization by Vempire")
+
+randomSystem = Random(minSystem, maxSystem)
+randomPosition = Random(minPosition, maxPosition)              
+                
+                destination = NewCoordinate(destinationGalaxy, randomSystem, randomPosition, PLANET_TYPE)
+                fleet = NewFleet()
+                fleet.SetOrigin(origin)
+                fleet.SetDestination(destination)
+                fleet.SetMission(COLONIZE)
+                fleet.AddShips(COLONYSHIP, 1)
+                fleet, err = fleet.SendNow()
+                
+            if err != nil {
+           // LogError(err)
+           // SendTelegram(TELEGRAM_CHAT_ID, " " +destinationGalaxy+ ":" +randomSystem+ ":" +randomPosition + ":::" +err)
+            Sleep(2*1000)
+            sentColonization()
+            break
+            }
+
+
+ships = NewShipsInfos()
+ships.Set(COLONYSHIP, 1)
+secs, fuel = FlightTime(origin.GetCoordinate(), destination, HUNDRED_PERCENT, *ships)
+print(secs)
+minutes = secs/60
+SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: ColonyShip Sent to: " +destinationGalaxy+ ":" +randomSystem+ ":" +randomPosition)
+SendTelegram(TELEGRAM_CHAT_ID, "Wait: "+minutes+ " minutes")
+
+secs = secs + 15
+
+Sleep(secs*1000)
+
+
+//////////////////////////////////////////////////////
+planets = GetPlanets()
+lastID = planets[len(planets)-1].ID
+print(lastID)
+lastPlanet = GetCachedCelestial(lastID)
+totalFields = lastPlanet.GetFields().Total
+print(totalFields)
+coords = lastPlanet.Coordinate
+//////////////////////////////////////////////////////
+
+
+
+
+if totalFields < 290 {
+    
+    Abandon(lastID)
+    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: The new colony was been deleted, because has only: " +totalFields )
+    init()
+} else {
+
+    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ") TESTE ::: " +coords+ " : New colony set with: " +totalFields+ " fields" )
+    
+    break
+}
+
+
+}
+
+func init(){
+    sentColonization()
+}
+
+message()
+Sleep(5*60*1000)
+init()
+
+
