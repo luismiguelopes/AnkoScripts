@@ -1,50 +1,67 @@
 //////////////////////////////////////
-// Change these settings to your own.
+// CONFIGURAÇÕES INICIAIS
 
 UserName = GetUserInfos().PlayerName
 UniverseName = GetUniverseName()
 Language = GetLanguage()
 
-
-
-// Telegram ID
 telegramId = TELEGRAM_CHAT_ID
 
-// Init Global Variables
 fsMade = 0
 
 //////////////////////////////////////
+// FUNÇÕES DE ENVIO
 
-SendTelegram(telegramId, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: Moons To Planets Started" )
+func SendAll(msg) {
+    Print(msg)
+    SendTelegram(telegramId, msg)
+//    SendDiscord(DISCORD_WEBHOOK_URL, msg)
+}
+
+
+//////////////////////////////////////
+// INÍCIO
+
+intro = "🚀 Início do envio de frotas de Luas para Planetas " + UserName + " (" + UniverseName + " | " + Language + ")"
+SendAll(intro)
 
 moons = GetCachedMoons()
-    for moon in moons {
 
-        resources, err = moon.GetResources()
-                origin = moon.Coordinate
-                destination = NewCoordinate(origin.Galaxy, origin.System, origin.Position, PLANET_TYPE)
-                fleet = NewFleet()
-                fleet.SetOrigin(origin)
-                Print(origin)
-                fleet.SetDestination(destination)
-                Print(destination)
-                fleet.SetMission(PARK)
-                fleet.AddShips(SMALLCARGO, 3000)
-                fleet, err = fleet.SendNow()
-               if err != nil {
-                   LogError(err)
-                   SendTelegram(telegramId, moon.Coordinate + " Error: " + err )
-                   Sleep(Random(1000, 3000))
-              } else {
-                    Print(fleet)
-                    SendTelegram(telegramId, "Origin: " + moon.Coordinate + " Destination: " + destination + " ::: Mission: Park" )
-                    fsMade = fsMade + 1
-                    Sleep(Random(1000, 5000))
-               }
+for moon in moons {
+    origin = moon.Coordinate
+    destination = NewCoordinate(origin.Galaxy, origin.System, origin.Position, PLANET_TYPE)
+
+    // Simula uma pausa de análise humana
+    Sleep(Random(1000, 3000))
+
+    // Criação da frota
+    fleet = NewFleet()
+    fleet.SetOrigin(origin)
+    fleet.SetDestination(destination)
+    fleet.SetMission(PARK)
+    fleet.AddShips(LARGECARGO, 5000)
+
+    // Envio da frota
+    fleet, err = fleet.SendNow()
+
+    if err != nil {
+        errorMsg = "⚠️ Erro ao enviar frota\n🌙 De: " + origin + "\n🪐 Para: " + destination + "\n❌ Erro: " + err
+        LogError(err)
+        SendAll(errorMsg)
+        Sleep(Random(1000, 2000))
+    } else {
+        successMsg = "✅ Frota enviada com sucesso!\n🌙 De: " + origin + "\n🪐 Para: " + destination + "\n🚚 Missão: Estacionar"
+        fsMade += 1
+        SendAll(successMsg)
+        Sleep(Random(7000, 15000))  // Delay mais humano
     }
+}
 
- SendTelegram(telegramId, UserName+ "  ("+UniverseName+"|"+Language+")::: Planets To Moons Finished Successfully!" )
- SendTelegram(telegramId, "Transports Made: " +  fsMade)
- 
- Sleep(3*60*1000)
- StartScript("planetsToMoons.ank")
+//////////////////////////////////////
+// FINALIZAÇÃO
+
+conclusion = "🎯 Fim do processo por " + UserName + " (" + UniverseName + " | " + Language + ")"
+summary = "📦 Total de frotas enviadas com sucesso: " + fsMade
+
+SendAll(conclusion)
+SendAll(summary)
