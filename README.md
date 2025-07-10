@@ -66,9 +66,8 @@ AnkoScripts is a comprehensive automation toolkit for OGame players who want to 
 ## 🚀 Installation
 
 1. Clone or download this repository
-2. Install the Anko browser extension
-3. Configure your Telegram bot (optional)
-4. Set up your game credentials in the script runner
+2. Install the Ninja Bot
+
 
 ## 📖 Usage
 
