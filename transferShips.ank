@@ -1,0 +1,72 @@
+//////////////////////////////////////
+// Change these settings to your own.
+
+//
+UniverseName = GetUniverseName()
+Language = GetLanguage()
+
+// Telegram ID
+telegramId = TELEGRAM_CHAT_ID
+
+// Desired ships to stay
+SC = 3500
+LC = 2000
+
+//////////////////////////////////////
+
+// Function to send ships from a moon to homeworld
+func TransferShipsFromMoon(moon, scToKeep, lcToKeep, telegramId) {
+    celestial = GetCachedCelestial(moon.Coordinate)
+    allShips, _ = celestial.GetShips()
+
+    largeToSend = allShips.LargeCargo - lcToKeep
+    smallToSend = allShips.SmallCargo - scToKeep
+
+    // Only send if there are ships to send
+    if largeToSend > 0 || smallToSend > 0 {
+        ships = {}
+        if largeToSend > 0 {
+            ships[LARGECARGO] = largeToSend
+        }
+        if smallToSend > 0 {
+            ships[SMALLCARGO] = smallToSend
+        }
+
+        origin = moon.Coordinate
+        destination = GetHomeWorld()
+        fleet = NewFleet()
+        fleet.SetOrigin(origin)
+        Print(origin)
+        fleet.SetDestination(destination)
+        Print(destination)
+        fleet.SetMission(PARK)
+        for shipID, nbr in ships {
+            fleet.AddShips(shipID, nbr)
+        }
+        fleet, err = fleet.SendNow()
+        if err != nil {
+            LogError(err)
+            SendTelegram(telegramId, origin + " Error: " + err)
+            Sleep(Random(1000, 3000))
+            return false
+        } else {
+            Print(fleet)
+            SendTelegram(telegramId, "Origin: " + origin + " Destination: " + destination + " ::: Mission: Park")
+            Sleep(Random(1000, 5000))
+            return true
+        }
+    }
+    return false
+}
+
+moons = GetMoons()
+fsMade = 0
+for moon in moons {
+    if TransferShipsFromMoon(moon, SC, LC, telegramId) {
+        fsMade = fsMade + 1
+    }
+}
+
+SendTelegram(telegramId, "Transports Made: " + fsMade)
+ 
+ 

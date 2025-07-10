@@ -1,0 +1,59 @@
+//////////////////////////////////////
+// Settings
+
+UserName = GetUserInfos().PlayerName
+UniverseName = GetUniverseName()
+Language = GetLanguage()
+telegramId = TELEGRAM_CHAT_ID
+
+// Parameters
+systemOffset = 0
+fleetSpeed = FOURTY_PERCENT
+
+//////////////////////////////////////
+// Helper functions
+
+func SendStatus(msg) {
+    SendTelegram(telegramId, UserName + " (" + UniverseName + "|" + Language + ") ::: " + msg)
+}
+
+func FleetSaveFromMoon(moon) {
+    resources, err = moon.GetResources()
+    origin = moon.Coordinate
+    destination = NewCoordinate(origin.Galaxy, origin.System + systemOffset, 1, PLANET_TYPE)
+    fleet = NewFleet()
+    fleet.SetOrigin(origin)
+    fleet.SetDestination(destination)
+    fleet.SetSpeed(fleetSpeed)
+    fleet.SetMission(COLONIZE)
+    fleet.SetAllShips()
+    fleet.SetAllResources()
+    fleet, err = fleet.SendNow()
+    if err != nil {
+        LogError(err)
+        SendTelegram(telegramId, moon.Coordinate + " Error: " + err)
+        return false
+    } else {
+        Print(fleet)
+        SendTelegram(telegramId, "Origin: " + moon.Coordinate + " Destination: " + destination + " ::: Mission: Colonize")
+        return true
+    }
+}
+
+//////////////////////////////////////
+// Main execution
+
+SendStatus("FleetSave On Colonize started")
+
+moons = GetCachedMoons()
+fsMade = 0
+
+for moon in moons {
+    if FleetSaveFromMoon(moon) {
+        fsMade = fsMade + 1
+    }
+    Sleep(Random(1000, 3000))
+}
+
+SendStatus("FleetSave On Colonize Finished!")
+SendTelegram(telegramId, "FleetSaves Made: " + fsMade)

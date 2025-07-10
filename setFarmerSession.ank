@@ -1,0 +1,86 @@
+import "math/rand"
+import "math"
+
+// Example of origins per galaxy (adapt for your planets/moons)
+origins = [
+    [GetHomeWorld()], // Galaxy 1
+    ["M:2:100:10", "M:2:200:12", "M:2:350:8"], // Galaxy 2
+    ["M:3:142:15"],
+    ["M:4:128:15"],
+    ["M:5:381:15"]
+]
+
+// Function to extract the system from an origin like "M:2:100:10"
+func GetSystem(origin) {
+    parts = strings.Split(origin, ":")
+    return int(parts[2])
+}
+
+// Circular distance between two systems (1-499)
+func CircularDistance(a, b) {
+    d = math.Abs(float64(a - b))
+    return math.Min(d, 499 - d + 1)
+}
+
+func CreateFarmSession(origin, galaxy, start, end, fastAttacking) {
+    s = NewFarmSession()
+    s.SetOrigin(origin)
+    s.SetRange(galaxy, start, end)
+    s.SetProbes(10)
+    s.SetAdditionalCargo(10)
+    s.SetMinimumResourcesToAttack(4000000)
+    s.SetMinimumDefensesToIgnore(0)
+    s.SetMinimumStorageToIgnore(5, 5, 5)
+    s.SetMinimumPlayerRank(0)
+    s.SetEspionageProbeRaids(false)
+    s.SetFastAttacking(fastAttacking)
+    s.SetAttackFromNearestPlanet(false)
+    s.SetAttackFromNearestMoon(true)
+    s.SetDeleteCombatReports(true)
+    s.SetFarmSpeed(HUNDRED_PERCENT)
+    s.SetPriorityRatio(1, 1, 1)
+    session, err = s.BuildFarmSession()
+    Print(session.ID, err)
+}
+
+// For each galaxy from 1 to 5
+for g = 1; g <= 5; g++ {
+    galOrigins = origins[g-1]
+    start = 1
+    while start <= 499 {
+        size = rand.Intn(100) + 50 // 50-149
+        end = start + size - 1
+        if end > 499 {
+            end = 499
+        }
+        // Calculate the center system of the interval
+        center = (start + end) / 2
+        // Choose the origin closest to the center (circular)
+        minDist = 1000
+        bestOrigin = galOrigins[0]
+        for o = 0; o < len(galOrigins); o++ {
+            sys = GetSystem(galOrigins[o])
+            dist = CircularDistance(sys, center)
+            if dist < minDist {
+                minDist = dist
+                bestOrigin = galOrigins[o]
+            }
+        }
+        CreateFarmSession(bestOrigin, g, start, end, false)
+        start = end + 1
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

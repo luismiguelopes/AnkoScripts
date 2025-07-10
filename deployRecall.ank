@@ -1,0 +1,78 @@
+// Settings
+telegramId = TELEGRAM_CHAT_ID
+
+UserName = GetUserInfos().PlayerName
+UniverseName = GetUniverseName()
+Language = GetLanguage()
+
+sendFrom = ""
+sendTo = "" // Fleet target (adjust as needed)
+fleetSpeed = TEN_PERCENT // You can adjust: TWENTY_PERCENT ... HUNDRED_PERCENT
+
+// Choose random arrival time between 09:00 and 10:00
+targetHour = Random(10, 11)
+targetMinute = Random(0, 59)
+targetSecond = Random(0, 59)
+
+// Function to create a timestamp from date and time
+func UnixFromDateTime(y, m, d, h, min, s) {
+    base = Unix(0, 0)
+    t = base.AddDate(y - 1970, m - 1, d - 1)
+    dateOnly = t.Unix()
+    secondsInDay = h * 3600 + min * 60 + s
+    return dateOnly + secondsInDay
+}
+
+// Get today's date and current timestamp
+year, month, day = Date()
+now = GetTimestamp()
+
+// Create arrival timestamp for tomorrow
+arrivalTimestamp = UnixFromDateTime(year, month, day+1, targetHour, targetMinute, targetSecond)
+delta = arrivalTimestamp - now - 3600
+
+// Cancel in the middle of the way (outbound + return, so 50%)
+waitBeforeCancel = delta/2
+
+Print("Now is:", year, "-", month, "-", day)
+Print("Current time:", Clock())
+Print("Current timestamp:", now)
+Print("Target timestamp:", arrivalTimestamp)
+Print("Total fleetsave:", ShortDur(delta))
+Print("Cancel in:", ShortDur(waitBeforeCancel))
+
+SendTelegram(telegramId, UserName + " (" + UniverseName + "|" + Language + ") ::: 🚀 FleetSave started")
+SendTelegram(telegramId, "Expected arrival tomorrow at " + targetHour + ":" + targetMinute)
+SendTelegram(telegramId, "Cancel in " + ShortDur(waitBeforeCancel))
+
+// Create and send fleet
+fleet = NewFleet()
+fleet.SetOrigin(sendFrom)
+fleet.SetDestination(sendTo)
+fleet.SetSpeed(fleetSpeed)
+fleet.SetMission(PARK)
+fleet.SetAllResources()
+fleet.SetAllShips()
+fleet, err = fleet.SendNow()
+
+if err != nil {
+    Print("Error sending fleet:", err)
+    SendTelegram(telegramId, "❌ Error sending fleet.")
+    return
+}
+
+// Wait until the moment to cancel
+Sleep(waitBeforeCancel * 1000)
+
+// Cancel fleet
+CancelFleet(fleet.ID)
+Print("Fleet canceled successfully!")
+SendTelegram(telegramId, "🛑 Fleet canceled. Will arrive tomorrow around " + targetHour + ":" + targetMinute)
+
+// Logout and return (simulate human behavior)
+Sleep(Random(3000, 8000))
+Logout()
+Sleep(Random(waitBeforeCancel * 800, waitBeforeCancel * 900))
+Login()
+
+SendTelegram(telegramId, "✅ Logged in again. I'm back.")

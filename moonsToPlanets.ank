@@ -1,5 +1,5 @@
 //////////////////////////////////////
-// CONFIGURAÇÕES INICIAIS
+// INITIAL SETTINGS
 
 UserName = GetUserInfos().PlayerName
 UniverseName = GetUniverseName()
@@ -10,7 +10,7 @@ telegramId = TELEGRAM_CHAT_ID
 fsMade = 0
 
 //////////////////////////////////////
-// FUNÇÕES DE ENVIO
+// SENDING FUNCTIONS
 
 func SendAll(msg) {
     Print(msg)
@@ -20,9 +20,9 @@ func SendAll(msg) {
 
 
 //////////////////////////////////////
-// INÍCIO
+// START
 
-intro = "🚀 Início do envio de frotas de Luas para Planetas " + UserName + " (" + UniverseName + " | " + Language + ")"
+intro = "🚀 Starting fleet dispatch from Moons to Planets " + UserName + " (" + UniverseName + " | " + Language + ")"
 SendAll(intro)
 
 moons = GetCachedMoons()
@@ -31,37 +31,37 @@ for moon in moons {
     origin = moon.Coordinate
     destination = NewCoordinate(origin.Galaxy, origin.System, origin.Position, PLANET_TYPE)
 
-    // Simula uma pausa de análise humana
+    // Simulate a human-like analysis pause
     Sleep(Random(1000, 3000))
 
-    // Criação da frota
+    // Fleet creation
     fleet = NewFleet()
     fleet.SetOrigin(origin)
     fleet.SetDestination(destination)
     fleet.SetMission(PARK)
     fleet.AddShips(LARGECARGO, 5000)
 
-    // Envio da frota
+    // Fleet dispatch
     fleet, err = fleet.SendNow()
 
     if err != nil {
-        errorMsg = "⚠️ Erro ao enviar frota\n🌙 De: " + origin + "\n🪐 Para: " + destination + "\n❌ Erro: " + err
+        errorMsg = "⚠️ Error sending fleet\n🌙 From: " + origin + "\n🪐 To: " + destination + "\n❌ Error: " + err
         LogError(err)
         SendAll(errorMsg)
         Sleep(Random(1000, 2000))
     } else {
-        successMsg = "✅ Frota enviada com sucesso!\n🌙 De: " + origin + "\n🪐 Para: " + destination + "\n🚚 Missão: Estacionar"
+        successMsg = "✅ Fleet sent successfully!\n🌙 From: " + origin + "\n🪐 To: " + destination + "\n🚚 Mission: Park"
         fsMade += 1
         SendAll(successMsg)
-        Sleep(Random(7000, 15000))  // Delay mais humano
+        Sleep(Random(7000, 15000))  // More human-like delay
     }
 }
 
 //////////////////////////////////////
-// FINALIZAÇÃO
+// FINALIZATION
 
-conclusion = "🎯 Fim do processo por " + UserName + " (" + UniverseName + " | " + Language + ")"
-summary = "📦 Total de frotas enviadas com sucesso: " + fsMade
+conclusion = "🎯 End of process by " + UserName + " (" + UniverseName + " | " + Language + ")"
+summary = "📦 Total fleets sent successfully: " + fsMade
 
 SendAll(conclusion)
 SendAll(summary)

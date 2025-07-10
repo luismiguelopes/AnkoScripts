@@ -4,6 +4,13 @@
 *.dll
 *.so
 *.dylib
+AutoBuildSpyProb.ank
+AutoBuildStorage.ank
+AutoColonyBuilder.ank
+AutoDefBuilder.ank
+AutoLargeCarBuilder.ank
+OptimalFarmer.ank
+
 
 # Test binary, built with `go test -c`
 *.test

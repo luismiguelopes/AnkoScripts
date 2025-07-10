@@ -1,0 +1,20 @@
+// Helper function to start a script and wait for its completion (with periodic checks)
+func StartAndWait(scriptName) {
+    StartScript(scriptName)
+    Sleep(5*60*1000)
+    while IsScriptRunning(scriptName) == true {
+        Sleep(5*60*1000)
+    }
+}
+
+// Main logic
+StartAndWait("moonsToPlanets.ank")
+StartAndWait("planetsToMoons.ank")
+RepatriateNow()
+
+
+
+
+
+
+

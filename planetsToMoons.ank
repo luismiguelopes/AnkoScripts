@@ -1,0 +1,80 @@
+//////////////////////////////////////
+// INITIAL SETTINGS
+
+UserName = GetUserInfos().PlayerName
+UniverseName = GetUniverseName()
+Language = GetLanguage()
+
+telegramId = TELEGRAM_CHAT_ID
+//discordWebhook = DISCORD_WEBHOOK_URL  // <- Replace with your Discord Webhook
+
+fsMade = 0
+
+//////////////////////////////////////
+// SENDING FUNCTIONS
+
+func SendAll(msg) {
+    Print(msg)
+    SendTelegram(telegramId, msg)
+   // SendDiscord(msg)
+}
+
+
+
+//////////////////////////////////////
+// START OF PROCESS
+
+intro = "🚀 Starting sending Planets ➡️ Moons by " + UserName + " (" + UniverseName + " | " + Language + ")"
+SendAll(intro)
+
+planets = GetCachedPlanets()
+
+// Simulate initial planning time
+Sleep(Random(3000, 7000))
+
+for planet in planets {
+
+    Print("🧠 Analyzing planet: " + planet.Coordinate)
+    Sleep(Random(1500, 3000))  // Human analysis time
+
+    origin = planet.Coordinate
+    destination = NewCoordinate(origin.Galaxy, origin.System, origin.Position, MOON_TYPE)
+
+    fleet = NewFleet()
+    fleet.SetOrigin(origin)
+    fleet.SetDestination(destination)
+    fleet.SetMission(PARK)
+    fleet.SetAllShips()       // <- Send all ships
+    fleet.SetAllResources()   // <- Send all resources
+
+    Sleep(Random(2000, 4000))  // Decision delay
+
+    fleet, err = fleet.SendNow()
+
+    if err != nil {
+        errorMsg = "❌ Error sending fleet\n🪐 From: " + origin + "\n🌙 To: " + destination + "\nError: " + err
+        LogError(err)
+        SendAll(errorMsg)
+        Sleep(Random(1000, 2000))
+    } else {
+        successMsg = "✅ Fleet sent\n🪐 From: " + origin + "\n🌙 To: " + destination + "\n🚚 Mission: Park (All ships + resources)"
+        fsMade += 1
+        SendAll(successMsg)
+        Sleep(Random(8000, 18000))  // Human delay after sending
+    }
+
+    // Random block delay
+    if Random(1, 100) > 85 {
+        Print("😴 Extra pause to look natural...")
+        Sleep(Random(10000, 25000))
+    }
+}
+
+//////////////////////////////////////
+// FINALIZATION
+
+conclusion = "🏁 Process completed by " + UserName + " (" + UniverseName + " | " + Language + ")"
+summary = "📦 Total fleets sent successfully: " + fsMade
+
+SendAll(conclusion)
+SendAll(summary)

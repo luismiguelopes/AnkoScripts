@@ -1,0 +1,67 @@
+
+// Utility functions
+username = GetUserInfos().PlayerName
+
+function Work(min, max) {
+    onWork = Random(min, max)
+    SendTelegram(TELEGRAM_CHAT_ID, username + " ::: Working for minutes: " + onWork)
+    ResumeFarmingBot()
+    Sleep(onWork * 60 * 1000)
+}
+
+function Pause(min, max) {
+    pause = Random(min, max)
+    SendTelegram(TELEGRAM_CHAT_ID, username + " ::: Break time for minutes: " + pause)
+    PauseFarmingBot()
+    Sleep(pause * 60 * 1000)
+}
+
+function Lunch(min, max) {
+    lunch = Random(min, max)
+    SendTelegram(TELEGRAM_CHAT_ID, username + " ::: Lunch break for minutes: " + lunch)
+    PauseFarmingBot()
+    Sleep(lunch * 60 * 1000)
+}
+
+function WakeUp(min, max) {
+    resume = Random(min, max)
+    SendTelegram(TELEGRAM_CHAT_ID, username + " ::: Waking up and farming for minutes: " + resume)
+    Sleep(resume * 60 * 1000)
+}
+
+function GoToWork(min, max) {
+    goToWork = Random(min, max)
+    SendTelegram(TELEGRAM_CHAT_ID, username + " ::: Pausing, going to work for minutes: " + goToWork)
+    PauseFarmingBot()
+    Sleep(goToWork * 60 * 1000)
+}
+
+// --- Start of the day ---
+WakeUp(20, 40)
+GoToWork(21, 30)
+
+// --- Work cycle before lunch ---
+// Adjust how many work/break cycles you want before lunch
+workCyclesBeforeLunch = 4
+for (i = 0; i < workCyclesBeforeLunch; i = i + 1) {
+    Work(22, 40)
+    Pause(5, 20)
+}
+
+// --- Lunch break ---
+Lunch(50, 75)
+
+// --- Work cycle after lunch ---
+workCyclesAfterLunch = 4
+for (i = 0; i < workCyclesAfterLunch; i = i + 1) {
+    Work(15, 40)
+    Pause(5, 25)
+}
+
+// --- End of the day ---
+SendTelegram(TELEGRAM_CHAT_ID, username + " ::: Please check what time it is???")
+
+
+
+
+
