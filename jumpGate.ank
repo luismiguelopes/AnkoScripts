@@ -1,23 +1,23 @@
-SendTelegram(TELEGRAM_CHAT_ID, "Jump Gate")
+SendTelegram(TELEGRAM_CHAT_ID, "Jump Gate Started")
 
 // Ships to keep on each moon
 keepShips = {
     
-    LIGHTFIGHTER: 1,
-    HEAVYFIGHTER: 1,
-    CRUISER: 1,
-    BATTLESHIP: 10,
-    SMALLCARGO: 10000,
-    LARGECARGO: 5000,
-    COLONYSHIP: 1,
-    BATTLECRUISER: 10,
-    BOMBER: 1,
-    DESTROYER: 10,
-    DEATHSTAR: 1,
-    RECYCLER: 10,
-    ESPIONAGEPROBE: 500,
-    REAPER: 10,
-    PATHFINDER: 500
+    LIGHTFIGHTER: 0,
+    HEAVYFIGHTER: 0,
+    CRUISER: 0,
+    BATTLESHIP: 0,
+    SMALLCARGO: 0,
+    LARGECARGO: 0,
+    COLONYSHIP: 0,
+    BATTLECRUISER: 0,
+    BOMBER: 0,
+    DESTROYER: 0,
+    DEATHSTAR: 0,
+    RECYCLER: 0,
+    ESPIONAGEPROBE: 0,
+    REAPER: 0,
+    PATHFINDER: 0
     
  
     // Add other ship types as needed
@@ -25,98 +25,126 @@ keepShips = {
 
 // Function to get all moons with ships to jump (excluding homeworld)
 func GetMoonsWithShipsToJump() {
-    Print("Entrou em GetMoonsWithShipsToJump")
     moonsWithShips = []
     shipsToJump = []
     coords = []
     moons = GetCachedMoons()
-    Print("moons: " + moons)
+    
     for moon in moons {
-        Print("A analisar moon: " + moon.Coordinate)
-        SleepRandSec(1, 6)
+        // Skip homeworld
         if moon.Coordinate == GetHomeWorld().Coordinate {
             continue
         }
+        
         celestial = GetCachedCelestial(moon.Coordinate)
         allShips, _ = celestial.GetShips()
-        Print("allShips: " + allShips)
         ships = {}
         hasShips = false
+        
+        // Check each ship type against keepShips configuration
         for shipType, keep in keepShips {
-            available = celestial.GetShips()
+            available = 0
+            if shipType == LIGHTFIGHTER {
+                available = allShips.LightFighter
+            } else if shipType == HEAVYFIGHTER {
+                available = allShips.HeavyFighter
+            } else if shipType == CRUISER {
+                available = allShips.Cruiser
+            } else if shipType == BATTLESHIP {
+                available = allShips.Battleship
+            } else if shipType == SMALLCARGO {
+                available = allShips.SmallCargo
+            } else if shipType == LARGECARGO {
+                available = allShips.LargeCargo
+            } else if shipType == COLONYSHIP {
+                available = allShips.ColonyShip
+            } else if shipType == BATTLECRUISER {
+                available = allShips.Battlecruiser
+            } else if shipType == BOMBER {
+                available = allShips.Bomber
+            } else if shipType == DESTROYER {
+                available = allShips.Destroyer
+            } else if shipType == DEATHSTAR {
+                available = allShips.Deathstar
+            } else if shipType == RECYCLER {
+                available = allShips.Recycler
+            } else if shipType == ESPIONAGEPROBE {
+                available = allShips.EspionageProbe
+            } else if shipType == REAPER {
+                available = allShips.Reaper
+            } else if shipType == PATHFINDER {
+                available = allShips.Pathfinder
+            }
+            
             toJump = available - keep
             if toJump > 0 {
                 ships[shipType] = toJump
                 hasShips = true
             }
         }
-        Print("ships a saltar desta moon: " + ships)
+        
+        // Add moon to list if it has ships to jump
         if hasShips {
             moonsWithShips += moon.GetID()
             shipsToJump += ships
             coords += moon.Coordinate
         }
     }
-    Print("moonsWithShips: " + moonsWithShips)
-    Print("shipsToJump: " + shipsToJump)
-    Print("coords: " + coords)
+    
     return moonsWithShips, shipsToJump, coords
 }
 
 // Function to perform a jump
 func DoJump(originID, destID, ships, coordFrom, coordTo) {
-    Print("Entrou em DoJump: " + originID + " -> " + destID)
     shipsInfo = NewShipsInfos()
     for shipType, amount in ships {
         shipsInfo.Set(shipType, amount)
     }
     err = JumpGate(originID, destID, *shipsInfo)
-    Print("Resultado do JumpGate: " + err)
-    SendTelegram(TELEGRAM_CHAT_ID, "Jump: " + coordFrom + " -> " + coordTo)
+    
+    if err == nil {
+        SendTelegram(TELEGRAM_CHAT_ID, "Jump successful: " + coordFrom + " -> " + coordTo)
+    } else {
+        SendTelegram(TELEGRAM_CHAT_ID, "Jump failed: " + coordFrom + " -> " + coordTo + " Error: " + err)
+    }
+    
     Sleep(Random(5000, 45000))
     return err
 }
 
 func dowork() {
-    Print("Entrou em dowork")
     ids, shipsList, coords = GetMoonsWithShipsToJump()
     x = len(ids)
-    Print("ids: " + ids)
-    Print("shipsList: " + shipsList)
-    Print("coords: " + coords)
-    Print("x: " + x)
-    SendTelegram(TELEGRAM_CHAT_ID, "total moons with ships to jump: " + x)
+    
+    SendTelegram(TELEGRAM_CHAT_ID, "Found " + x + " moons with ships to jump")
 
     if x == 0 {
-        Print("Nenhuma moon com ships para saltar, a terminar script.")
-        SendTelegram(TELEGRAM_CHAT_ID, "EOF")
+        SendTelegram(TELEGRAM_CHAT_ID, "No moons with ships to jump, ending script")
         StopScript("jumpGate.ank")
         return
     }
 
     // If only one moon, send to homeworld
     if x == 1 {
-        Print("Apenas uma moon, a enviar para homeworld.")
         DoJump(ids[0], GetHomeWorld().GetID(), shipsList[0], coords[0], GetHomeWorld().Coordinate)
-        SendTelegram(TELEGRAM_CHAT_ID, "EOF")
+        SendTelegram(TELEGRAM_CHAT_ID, "Single moon sent to homeworld")
         StopScript("jumpGate.ank")
         return
     }
 
     // Pair moons and jump ships between them
     for i = 0; i < x - 1; i += 2 {
-        Print("A saltar de " + coords[i] + " para " + coords[i+1])
         DoJump(ids[i], ids[i+1], shipsList[i], coords[i], coords[i+1])
     }
+    
     // If odd number, send last to homeworld
     if x % 2 == 1 {
-        Print("Moon impar, a enviar última para homeworld.")
         DoJump(ids[x-1], GetHomeWorld().GetID(), shipsList[x-1], coords[x-1], GetHomeWorld().Coordinate)
     }
 }
 
 for {
     dowork()
-    SendTelegram(TELEGRAM_CHAT_ID, "Sleeping")
+    SendTelegram(TELEGRAM_CHAT_ID, "Sleeping for next cycle")
     Sleep(Random(30, 45) * 60 * 1000)
 }
