@@ -1,11 +1,57 @@
-planet = GetCachedCelestial("1:1:2")                                            // Planet to use
-target = NewCoordinate(1, 1, 1, MOON_TYPE)                     // Target coordinate
-nbr = 25                                                 // Number of missiles to build and send
-constructionTime = 1                                    // Time to build 1 missile (secs)
+//////////////////////////////////////
+// SETTINGS
 
-for i = 1; i <= 30; i++ {                                // Repeat the attack 30 times
-    BuildDefense(planet.ID, INTERPLANETARYMISSILES, nbr) // Build missiles
-    Sleep(((constructionTime+1) * nbr) * 1000)           // Wait for missiles to be built
-    duration, err = SendIPM(planet.ID, target, nbr, 0)   // Send missiles
-    Print(duration, err)                                 // Print error if any
+planet = GetCachedCelestial("1:1:2")            // Planet to use
+target = NewCoordinate(1, 1, 1, MOON_TYPE)      // Target coordinate
+nbr = 25                                        // Missiles to build and send per attack
+constructionTime = 1                            // Time to build 1 missile (secs)
+attacks = 30                                    // How many times to repeat
+
+//////////////////////////////////////
+// COMMON (same block in every script)
+
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
 }
+
+//////////////////////////////////////
+// MAIN
+
+if planet == nil {
+    Notify("error", "missiles: the planet in the settings is not one of yours")
+    return
+}
+
+sent = 0
+for i = 1; i <= attacks; i++ {
+    err = BuildDefense(planet.ID, INTERPLANETARYMISSILES, nbr)
+    if err != nil {
+        Notify("error", "missiles: build failed on attack " + i + ": " + err)
+        break
+    }
+    Sleep(((constructionTime + 1) * nbr) * 1000)    // Wait for missiles to be built
+
+    duration, err = SendIPM(planet.ID, target, nbr, 0)
+    if err != nil {
+        Notify("error", "missiles: send failed on attack " + i + ": " + err)
+        break
+    }
+    sent = sent + 1
+    Notify("info", "IPM attack " + i + "/" + attacks + " sent, impact in " + ShortDur(duration))
+}
+
+Notify("report", "🚀 IPM done: " + sent + "/" + attacks + " attacks on " + target)

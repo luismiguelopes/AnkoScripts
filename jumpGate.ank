@@ -1,8 +1,8 @@
-SendTelegram(TELEGRAM_CHAT_ID, "Jump Gate Started")
+//////////////////////////////////////
+// SETTINGS
 
 // Ships to keep on each moon
 keepShips = {
-    
     LIGHTFIGHTER: 0,
     HEAVYFIGHTER: 0,
     CRUISER: 0,
@@ -18,9 +18,52 @@ keepShips = {
     ESPIONAGEPROBE: 0,
     REAPER: 0,
     PATHFINDER: 0
-    
- 
-    // Add other ship types as needed
+}
+cycleMinMinutes = 30
+cycleMaxMinutes = 45
+
+//////////////////////////////////////
+// COMMON (same block in every script)
+
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
+}
+
+//////////////////////////////////////
+// MAIN
+
+// Amount of a ship type in a ShipsInfos
+func ShipCount(allShips, shipType) {
+    if shipType == LIGHTFIGHTER { return allShips.LightFighter }
+    if shipType == HEAVYFIGHTER { return allShips.HeavyFighter }
+    if shipType == CRUISER { return allShips.Cruiser }
+    if shipType == BATTLESHIP { return allShips.Battleship }
+    if shipType == SMALLCARGO { return allShips.SmallCargo }
+    if shipType == LARGECARGO { return allShips.LargeCargo }
+    if shipType == COLONYSHIP { return allShips.ColonyShip }
+    if shipType == BATTLECRUISER { return allShips.Battlecruiser }
+    if shipType == BOMBER { return allShips.Bomber }
+    if shipType == DESTROYER { return allShips.Destroyer }
+    if shipType == DEATHSTAR { return allShips.Deathstar }
+    if shipType == RECYCLER { return allShips.Recycler }
+    if shipType == ESPIONAGEPROBE { return allShips.EspionageProbe }
+    if shipType == REAPER { return allShips.Reaper }
+    if shipType == PATHFINDER { return allShips.Pathfinder }
+    return 0
 }
 
 // The moon at the homeworld's position (jump gates only connect moons), or nil
@@ -35,142 +78,99 @@ func GetHomeMoon() {
     return nil
 }
 
-homeMoon = GetHomeMoon()
-if homeMoon == nil {
-    SendTelegram(TELEGRAM_CHAT_ID, "⚠️ Jump Gate: homeworld has no moon, leftover moons won't be jumped home")
-}
-
-// Jump leftover ships to the home moon
-func JumpHome(originID, ships, coordFrom) {
-    if homeMoon == nil {
-        SendTelegram(TELEGRAM_CHAT_ID, "Skipped " + coordFrom + ": no home moon to jump to")
-        return
-    }
-    DoJump(originID, homeMoon.GetID(), ships, coordFrom, homeMoon.Coordinate)
-}
-
-// Function to get all moons with ships to jump (excluding the home moon)
+// All moons (except the home moon) with ships above keepShips
 func GetMoonsWithShipsToJump() {
     moonsWithShips = []
     shipsToJump = []
     coords = []
-    moons = GetCachedMoons()
 
-    for moon in moons {
-        // Skip the home moon
+    for moon in GetCachedMoons() {
         if homeMoon != nil && moon.GetID() == homeMoon.GetID() {
             continue
         }
-        
-        celestial = GetCachedCelestial(moon.Coordinate)
-        allShips, _ = celestial.GetShips()
+        allShips, err = GetCachedCelestial(moon.Coordinate).GetShips()
+        if err != nil {
+            Notify("error", "Could not read ships on " + moon.Coordinate + ": " + err)
+            continue
+        }
+
         ships = {}
         hasShips = false
-        
-        // Check each ship type against keepShips configuration
         for shipType, keep in keepShips {
-            available = 0
-            if shipType == LIGHTFIGHTER {
-                available = allShips.LightFighter
-            } else if shipType == HEAVYFIGHTER {
-                available = allShips.HeavyFighter
-            } else if shipType == CRUISER {
-                available = allShips.Cruiser
-            } else if shipType == BATTLESHIP {
-                available = allShips.Battleship
-            } else if shipType == SMALLCARGO {
-                available = allShips.SmallCargo
-            } else if shipType == LARGECARGO {
-                available = allShips.LargeCargo
-            } else if shipType == COLONYSHIP {
-                available = allShips.ColonyShip
-            } else if shipType == BATTLECRUISER {
-                available = allShips.Battlecruiser
-            } else if shipType == BOMBER {
-                available = allShips.Bomber
-            } else if shipType == DESTROYER {
-                available = allShips.Destroyer
-            } else if shipType == DEATHSTAR {
-                available = allShips.Deathstar
-            } else if shipType == RECYCLER {
-                available = allShips.Recycler
-            } else if shipType == ESPIONAGEPROBE {
-                available = allShips.EspionageProbe
-            } else if shipType == REAPER {
-                available = allShips.Reaper
-            } else if shipType == PATHFINDER {
-                available = allShips.Pathfinder
-            }
-            
-            toJump = available - keep
+            toJump = ShipCount(allShips, shipType) - keep
             if toJump > 0 {
                 ships[shipType] = toJump
                 hasShips = true
             }
         }
-        
-        // Add moon to list if it has ships to jump
+
         if hasShips {
             moonsWithShips += moon.GetID()
             shipsToJump += ships
             coords += moon.Coordinate
         }
     }
-    
     return moonsWithShips, shipsToJump, coords
 }
 
-// Function to perform a jump
+// Returns true when the jump worked
 func DoJump(originID, destID, ships, coordFrom, coordTo) {
     shipsInfo = NewShipsInfos()
     for shipType, amount in ships {
         shipsInfo.Set(shipType, amount)
     }
     err = JumpGate(originID, destID, *shipsInfo)
-    
     if err == nil {
-        SendTelegram(TELEGRAM_CHAT_ID, "Jump successful: " + coordFrom + " -> " + coordTo)
+        Notify("info", "Jump " + coordFrom + " -> " + coordTo)
     } else {
-        SendTelegram(TELEGRAM_CHAT_ID, "Jump failed: " + coordFrom + " -> " + coordTo + " Error: " + err)
+        Notify("error", "Jump failed " + coordFrom + " -> " + coordTo + ": " + err)
     }
-    
     Sleep(Random(5000, 45000))
-    return err
+    return err == nil
 }
 
+// Jump leftover ships to the home moon
+func JumpHome(originID, ships, coordFrom) {
+    if homeMoon == nil {
+        Notify("warn", "Skipped " + coordFrom + ": no home moon to jump to")
+        return false
+    }
+    return DoJump(originID, homeMoon.GetID(), ships, coordFrom, homeMoon.Coordinate)
+}
+
+// Returns false when there is nothing left to jump
 func dowork() {
     ids, shipsList, coords = GetMoonsWithShipsToJump()
     x = len(ids)
-    
-    SendTelegram(TELEGRAM_CHAT_ID, "Found " + x + " moons with ships to jump")
-
     if x == 0 {
-        SendTelegram(TELEGRAM_CHAT_ID, "No moons with ships to jump, ending script")
-        StopScript("jumpGate.ank")
-        return
+        Notify("report", "Jump Gate: no moons with ships to jump, ending script")
+        return false
     }
 
-    // If only one moon, send to homeworld
+    ok = 0
     if x == 1 {
-        JumpHome(ids[0], shipsList[0], coords[0])
-        SendTelegram(TELEGRAM_CHAT_ID, "Single moon sent to home moon")
-        StopScript("jumpGate.ank")
-        return
+        if JumpHome(ids[0], shipsList[0], coords[0]) { ok = ok + 1 }
+    } else {
+        // Pair moons and jump ships between them
+        for i = 0; i < x - 1; i += 2 {
+            if DoJump(ids[i], ids[i+1], shipsList[i], coords[i], coords[i+1]) { ok = ok + 1 }
+        }
+        // If odd number, send last to the home moon
+        if x % 2 == 1 {
+            if JumpHome(ids[x-1], shipsList[x-1], coords[x-1]) { ok = ok + 1 }
+        }
     }
-
-    // Pair moons and jump ships between them
-    for i = 0; i < x - 1; i += 2 {
-        DoJump(ids[i], ids[i+1], shipsList[i], coords[i], coords[i+1])
-    }
-    
-    // If odd number, send last to the home moon
-    if x % 2 == 1 {
-        JumpHome(ids[x-1], shipsList[x-1], coords[x-1])
-    }
+    Notify("report", "Jump Gate cycle: " + x + " moons with ships, " + ok + " jumps done")
+    return x > 1
 }
 
-for {
-    dowork()
-    SendTelegram(TELEGRAM_CHAT_ID, "Sleeping for next cycle")
-    Sleep(Random(30, 45) * 60 * 1000)
+homeMoon = GetHomeMoon()
+if homeMoon == nil {
+    Notify("warn", "Jump Gate: homeworld has no moon, leftover moons won't be jumped home")
+}
+Notify("report", "Jump Gate started")
+
+for dowork() {
+    Notify("info", "Sleeping for next cycle")
+    Sleep(Random(cycleMinMinutes, cycleMaxMinutes) * 60 * 1000)
 }

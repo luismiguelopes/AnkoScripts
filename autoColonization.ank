@@ -12,13 +12,24 @@ maxFailedSends = 10      // consecutive failed sends before the script gives up
 startDelayMinutes = 5    // safety delay before the first send
 
 //////////////////////////////////////
+// COMMON (same block in every script)
 
 UserName = GetCachedPlayer().PlayerName
 UniverseName = GetUniverseName()
 
-func Notify(msg) {
-    Print(msg)
-    SendTelegram(TELEGRAM_CHAT_ID, UserName + " (" + UniverseName + ") ::: " + msg)
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
 }
 
 // Returns our planet at the given coordinate, or nil
@@ -34,7 +45,7 @@ func FindPlanetAt(coord) {
 
 origin = GetHomeWorld()
 
-Notify("AutoColonization starts in " + startDelayMinutes + " min. Target: G" + destinationGalaxy + " systems " + minSystem + "-" + maxSystem + " positions " + minPosition + "-" + maxPosition + ", min fields " + minFields)
+Notify("report", "AutoColonization starts in " + startDelayMinutes + " min. Target: G" + destinationGalaxy + " systems " + minSystem + "-" + maxSystem + " positions " + minPosition + "-" + maxPosition + ", min fields " + minFields)
 Sleep(startDelayMinutes * 60 * 1000)
 
 failedSends = 0
@@ -55,9 +66,9 @@ for {
 
     if err != nil {
         failedSends = failedSends + 1
-        LogError(err)
+        Notify("info", "Send to " + destination + " failed: " + err)
         if failedSends >= maxFailedSends {
-            Notify("❌ Stopping: " + failedSends + " failed sends in a row. Last error: " + err)
+            Notify("error", "Stopping: " + failedSends + " failed sends in a row. Last error: " + err)
             break
         }
         Sleep(Random(2000, 5000))
@@ -68,23 +79,23 @@ for {
     ships = NewShipsInfos()
     ships.Set(COLONYSHIP, 1)
     secs, _ = FlightTime(origin.GetCoordinate(), destination, HUNDRED_PERCENT, *ships)
-    Notify("ColonyShip sent to " + destination + ". Arrival in " + (secs / 60) + " min")
+    Notify("info", "ColonyShip sent to " + destination + ". Arrival in " + (secs / 60) + " min")
     Sleep((secs + 15) * 1000)
 
     // Only ever touch the planet at the destination coordinate
     colony = FindPlanetAt(destination)
     if colony == nil {
-        Notify("⚠️ No colony at " + destination + " after arrival (spot taken?). Trying another spot.")
+        Notify("warn", "No colony at " + destination + " after arrival (spot taken?). Trying another spot.")
         continue
     }
 
     totalFields = GetCachedCelestial(colony.ID).GetFields().Total
     if totalFields < minFields {
         Abandon(colony.ID)
-        Notify("🗑️ Abandoned " + destination + ": only " + totalFields + " fields")
+        Notify("report", "🗑️ Abandoned " + destination + ": only " + totalFields + " fields")
         continue
     }
 
-    Notify("✅ New colony kept at " + destination + " with " + totalFields + " fields")
+    Notify("report", "✅ New colony kept at " + destination + " with " + totalFields + " fields")
     break
 }

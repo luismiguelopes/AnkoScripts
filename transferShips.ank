@@ -1,71 +1,80 @@
 //////////////////////////////////////
-// Change these settings to your own.
+// SETTINGS
 
-//
-UniverseName = GetUniverseName()
-
-// Telegram ID
-telegramId = TELEGRAM_CHAT_ID
-
-// Desired ships to stay
+// Ships to keep on each moon; the rest is parked on the homeworld
 SC = 3500
 LC = 2000
 
 //////////////////////////////////////
+// COMMON (same block in every script)
 
-// Function to send ships from a moon to homeworld
-func TransferShipsFromMoon(moon, scToKeep, lcToKeep, telegramId) {
-    celestial = GetCachedCelestial(moon.Coordinate)
-    allShips, _ = celestial.GetShips()
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
+}
+
+//////////////////////////////////////
+// MAIN
+
+// Sends the extra cargos from a moon to the homeworld. Returns "sent", "skipped" or "failed"
+func TransferShipsFromMoon(moon, scToKeep, lcToKeep) {
+    origin = moon.Coordinate
+    allShips, err = GetCachedCelestial(origin).GetShips()
+    if err != nil {
+        Notify("error", origin + " could not read ships: " + err)
+        return "failed"
+    }
 
     largeToSend = allShips.LargeCargo - lcToKeep
     smallToSend = allShips.SmallCargo - scToKeep
-
-    // Only send if there are ships to send
-    if largeToSend > 0 || smallToSend > 0 {
-        ships = {}
-        if largeToSend > 0 {
-            ships[LARGECARGO] = largeToSend
-        }
-        if smallToSend > 0 {
-            ships[SMALLCARGO] = smallToSend
-        }
-
-        origin = moon.Coordinate
-        destination = GetHomeWorld()
-        fleet = NewFleet()
-        fleet.SetOrigin(origin)
-        Print(origin)
-        fleet.SetDestination(destination)
-        Print(destination)
-        fleet.SetMission(PARK)
-        for shipID, nbr in ships {
-            fleet.AddShips(shipID, nbr)
-        }
-        fleet, err = fleet.SendNow()
-        if err != nil {
-            LogError(err)
-            SendTelegram(telegramId, origin + " Error: " + err)
-            Sleep(Random(1000, 3000))
-            return false
-        } else {
-            Print(fleet)
-            SendTelegram(telegramId, "Origin: " + origin + " Destination: " + destination + " ::: Mission: Park")
-            Sleep(Random(1000, 5000))
-            return true
-        }
+    if largeToSend <= 0 && smallToSend <= 0 {
+        return "skipped"
     }
-    return false
+
+    destination = GetHomeWorld()
+    fleet = NewFleet()
+    fleet.SetOrigin(origin)
+    fleet.SetDestination(destination)
+    fleet.SetMission(PARK)
+    if largeToSend > 0 {
+        fleet.AddShips(LARGECARGO, largeToSend)
+    }
+    if smallToSend > 0 {
+        fleet.AddShips(SMALLCARGO, smallToSend)
+    }
+    fleet, err = fleet.SendNow()
+    if err != nil {
+        Notify("error", origin + " ➡️ homeworld failed: " + err)
+        Sleep(Random(1000, 3000))
+        return "failed"
+    }
+    Notify("info", origin + " ➡️ " + destination.Coordinate + " ::: LC " + largeToSend + " | SC " + smallToSend)
+    Sleep(Random(1000, 5000))
+    return "sent"
 }
 
-moons = GetMoons()
-fsMade = 0
-for moon in moons {
-    if TransferShipsFromMoon(moon, SC, LC, telegramId) {
-        fsMade = fsMade + 1
+sent = 0
+failed = 0
+for moon in GetCachedMoons() {
+    result = TransferShipsFromMoon(moon, SC, LC)
+    if result == "sent" {
+        sent = sent + 1
+    } else if result == "failed" {
+        failed = failed + 1
     }
 }
 
-SendTelegram(telegramId, "Transports Made: " + fsMade)
- 
- 
+Notify("report", "🚚 Moons ➡️ Homeworld done. Transports: " + sent + " | Failed: " + failed)

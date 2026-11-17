@@ -1,30 +1,59 @@
+//////////////////////////////////////
+// SETTINGS
 
-//SETTINGS----------------------------------------------------------------------
+shipsDesired = 500      // Large Cargos to keep on each planet
+checkInterval = 10      // minutes between checks
 
-shipsDesired = 500
-checkInterval = 10 
+//////////////////////////////////////
+// COMMON (same block in every script)
 
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
 
-//SETTINGS DONE-----------------------------------------------------------------
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
+}
 
+//////////////////////////////////////
+// MAIN
 
-Planets = GetPlanets()
-for{
-    for planet in Planets {
-        celestial = GetCachedCelestial(planet.Coordinate)
-        allShips, _ = celestial.GetShips()
-        
-        shipType = allShips.LargeCargo
-        capsShipType = LARGECARGO
-        nrShips = shipsDesired - shipType
-        
-        
-        //Only build when no ships already being build
+Notify("report", "buildShips started: " + shipsDesired + " LC per planet, every " + checkInterval + " min")
+
+for {
+    // Read planets every cycle so new colonies are included
+    for planet in GetPlanets() {
+        allShips, err = GetCachedCelestial(planet.Coordinate).GetShips()
+        if err != nil {
+            Notify("error", "Could not read ships on " + planet.Coordinate + ": " + err)
+            continue
+        }
+        missing = shipsDesired - allShips.LargeCargo
+        if missing <= 0 {
+            continue
+        }
+
+        // Only build when nothing is in the shipyard queue
         productionLine = GetProduction(planet.ID)[0]
-        if(len(productionLine) == 0 && shipType < shipsDesired){
-            celestial.Build(capsShipType, nrShips)
-            print("Build: " +nrShips+ " " + capsShipType + " on: "+planet.Coordinate)
+        if len(productionLine) != 0 {
+            continue
+        }
+        err = GetCachedCelestial(planet.Coordinate).Build(LARGECARGO, missing)
+        if err != nil {
+            Notify("warn", "Could not build " + missing + " LC on " + planet.Coordinate + ": " + err)
+        } else {
+            Notify("info", "Build " + missing + " LC on " + planet.Coordinate)
         }
     }
-   Sleep(checkInterval * 60 * 1000) 
+    Sleep(checkInterval * 60 * 1000)
 }

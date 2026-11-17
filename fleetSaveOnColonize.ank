@@ -1,34 +1,47 @@
 //////////////////////////////////////
-// Settings
+// SETTINGS
 
-UserName = GetCachedPlayer().PlayerName
-UniverseName = GetUniverseName()
-telegramId = TELEGRAM_CHAT_ID
-
-// Parameters
-systemOffset = 0
+systemOffset = 0            // target system = moon system + offset (position 1)
 fleetSpeed = FOURTY_PERCENT
 
 //////////////////////////////////////
-// Helper functions
+// COMMON (same block in every script)
 
-func SendStatus(msg) {
-    SendTelegram(telegramId, UserName + " (" + UniverseName + ") ::: " + msg)
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
 }
 
+//////////////////////////////////////
+// MAIN
+
+// Returns "sent", "skipped" or "failed"
 func FleetSaveFromMoon(moon) {
     origin = moon.Coordinate
     // The Colonize mission needs at least one colony ship in the fleet
     ships, err = GetCachedCelestial(origin).GetShips()
     if err != nil {
-        LogError(err)
-        SendTelegram(telegramId, origin + " Error reading ships: " + err)
-        return false
+        Notify("error", origin + " could not read ships: " + err)
+        return "failed"
     }
     if ships.ColonyShip == 0 {
-        SendTelegram(telegramId, "⚠️ " + origin + " skipped: no colony ship on this moon")
-        return false
+        Notify("warn", origin + " skipped: no colony ship on this moon")
+        return "skipped"
     }
+
     destination = NewCoordinate(origin.Galaxy, origin.System + systemOffset, 1, PLANET_TYPE)
     fleet = NewFleet()
     fleet.SetOrigin(origin)
@@ -39,30 +52,28 @@ func FleetSaveFromMoon(moon) {
     fleet.SetAllResources()
     fleet, err = fleet.SendNow()
     if err != nil {
-        LogError(err)
-        SendTelegram(telegramId, moon.Coordinate + " Error: " + err)
-        return false
-    } else {
-        Print(fleet)
-        SendTelegram(telegramId, "Origin: " + moon.Coordinate + " Destination: " + destination + " ::: Mission: Colonize")
-        return true
+        Notify("error", origin + " fleetsave failed: " + err)
+        return "failed"
     }
+    Notify("info", origin + " ➡️ " + destination + " ::: Colonize")
+    return "sent"
 }
 
-//////////////////////////////////////
-// Main execution
+Notify("report", "FleetSave On Colonize started")
 
-SendStatus("FleetSave On Colonize started")
-
-moons = GetCachedMoons()
-fsMade = 0
-
-for moon in moons {
-    if FleetSaveFromMoon(moon) {
-        fsMade = fsMade + 1
+sent = 0
+failed = 0
+skipped = 0
+for moon in GetCachedMoons() {
+    result = FleetSaveFromMoon(moon)
+    if result == "sent" {
+        sent = sent + 1
+    } else if result == "failed" {
+        failed = failed + 1
+    } else {
+        skipped = skipped + 1
     }
     Sleep(Random(1000, 3000))
 }
 
-SendStatus("FleetSave On Colonize Finished!")
-SendTelegram(telegramId, "FleetSaves Made: " + fsMade)
+Notify("report", "FleetSave On Colonize done. Sent: " + sent + " | Skipped: " + skipped + " | Failed: " + failed)

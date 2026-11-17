@@ -1,78 +1,93 @@
-// Adjust factor manually along universe progression. you can also use numbers like 1.3 or 1.57
-// These are the factors from LEFT TO RIGHT for every planet in the same order as you see in your browser from TOP to BOTTOM.
-// NOTE: When you change the order of the planets in your settings, you MUST change the order in the list "factors" also
+//////////////////////////////////////
+// SETTINGS
 
-// SETTINGS--------------------------------------------------------------------
-factors = [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10] // Example for 7 Planets , if you dont want to include a planet, just set to 0 
+// One factor per planet, in the same order as your planet list in the browser (top to bottom).
+// Desired amount on a planet = value below * factor. Factor 0 = no defense on that planet.
+// NOTE: if you reorder your planets in the game, reorder this list too.
+factors = [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
 
-//Explain: With the factors above every planet except planet 2 and planet 4 will 
-//automaticly build the defense you setup below. Planet 2 will always 
-//build twice the amount you setup below. Planet 4 will build no defence.
-
-// Here you set the ratio of the defences to be build (change number to your liking)
 rocket_launcher_desired = 1500
-light_laser_desired= 400
-heavy_laser_desired= 100
-gauss_cannon_desired= 50
-ion_cannon_desired=  50
-plasma_desired= 50
+light_laser_desired = 400
+heavy_laser_desired = 100
+gauss_cannon_desired = 50
+ion_cannon_desired = 50
+plasma_desired = 50
 anti_balistic_desired = 20
 
-checkInterval = 30 // Minutes between checks
-// SETTINGS DONE----------------------------------------------------------------
+checkInterval = 30 // minutes between checks
 
-Planets = GetPlanets()
+//////////////////////////////////////
+// COMMON (same block in every script)
 
-// One factor per planet is required, otherwise planets would get the wrong defense
-if len(factors) < len(Planets) {
-    LogError("buildDef: " + len(factors) + " factors but " + len(Planets) + " planets. Add a factor for every planet.")
-    SendTelegram(TELEGRAM_CHAT_ID, "❌ buildDef stopped: " + len(factors) + " factors for " + len(Planets) + " planets")
-    return
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
 }
-if len(factors) > len(Planets) {
-    LogWarn("buildDef: more factors (" + len(factors) + ") than planets (" + len(Planets) + "). Extra factors are ignored.")
+
+//////////////////////////////////////
+// MAIN
+
+// Queue the missing amount of one defense type
+func Ensure(celestial, defenseID, have, desired) {
+    desired = Round(desired)
+    if have < desired {
+        celestial.Build(defenseID, desired - have)
+    }
 }
 
-for{
-    for i = 0; i < len(Planets); i++ {
-        planet = Planets[i]
-        // Factor 0 = no defense at all on this planet
-        if factors[i] == 0 {
+Notify("report", "buildDef started, checking every " + checkInterval + " min")
+
+for {
+    // Read planets every cycle; a new colony without a factor stops the script
+    planets = GetPlanets()
+    if len(factors) < len(planets) {
+        Notify("error", "buildDef stopped: " + len(factors) + " factors for " + len(planets) + " planets. Add a factor for every planet.")
+        break
+    }
+
+    for i = 0; i < len(planets); i++ {
+        planet = planets[i]
+        f = factors[i]
+        if f == 0 {
             continue
         }
-        celestial = GetCachedCelestial(planet.Coordinate)
-        allDefense, _ = celestial.GetDefense()
-        
+
+        // Only queue when the shipyard is free
         productionLine = GetProduction(planet.ID)[0]
-        if(len(productionLine)) == 0{
-            if(allDefense.RocketLauncher < Round(rocket_launcher_desired * factors[i])){
-                celestial.Build(ROCKETLAUNCHER, Round(rocket_launcher_desired * factors[i]) - allDefense.RocketLauncher)
-            }
-            if(allDefense.LightLaser <  Round(light_laser_desired*factors[i])){
-                 celestial.Build(LIGHTLASER,Round(light_laser_desired*factors[i])- allDefense.LightLaser)
-            }
-            if(allDefense.HeavyLaser < Round(heavy_laser_desired*factors[i])){
-                 celestial.Build(HEAVYLASER,Round(heavy_laser_desired*factors[i])- allDefense.HeavyLaser)
-            }
-            if(allDefense.GaussCannon < Round(gauss_cannon_desired*factors[i])){
-                celestial.Build(GAUSSCANNON,Round(gauss_cannon_desired*factors[i])- allDefense.GaussCannon)
-            }
-            if(allDefense.IonCannon< Round(ion_cannon_desired*factors[i])){
-                celestial.Build(IONCANNON,Round(ion_cannon_desired*factors[i]) - allDefense.IonCannon)
-            }
-            if(allDefense.PlasmaTurret< Round(plasma_desired*factors[i])){
-                celestial.Build(PLASMATURRET,Round(plasma_desired*factors[i])- allDefense.PlasmaTurret)
-            }
-            if(allDefense.SmallShieldDome == 0){
-               celestial.Build(SMALLSHIELDDOME,1)
-            }
-            if(allDefense.LargeShieldDome == 0){
-                celestial.Build(LARGESHIELDDOME,1)
-            }
-            if(allDefense.AntiBallisticMissiles  < Round(anti_balistic_desired*factors[i])){
-               celestial.Build(ANTIBALLISTICMISSILES,Round(anti_balistic_desired*factors[i]) - allDefense.AntiBallisticMissiles )
-            }
+        if len(productionLine) != 0 {
+            continue
         }
+
+        celestial = GetCachedCelestial(planet.Coordinate)
+        d, err = celestial.GetDefense()
+        if err != nil {
+            Notify("error", "Could not read defense on " + planet.Coordinate + ": " + err)
+            continue
+        }
+
+        Ensure(celestial, ROCKETLAUNCHER, d.RocketLauncher, rocket_launcher_desired * f)
+        Ensure(celestial, LIGHTLASER, d.LightLaser, light_laser_desired * f)
+        Ensure(celestial, HEAVYLASER, d.HeavyLaser, heavy_laser_desired * f)
+        Ensure(celestial, GAUSSCANNON, d.GaussCannon, gauss_cannon_desired * f)
+        Ensure(celestial, IONCANNON, d.IonCannon, ion_cannon_desired * f)
+        Ensure(celestial, PLASMATURRET, d.PlasmaTurret, plasma_desired * f)
+        Ensure(celestial, SMALLSHIELDDOME, d.SmallShieldDome, 1)
+        Ensure(celestial, LARGESHIELDDOME, d.LargeShieldDome, 1)
+        Ensure(celestial, ANTIBALLISTICMISSILES, d.AntiBallisticMissiles, anti_balistic_desired * f)
+        Notify("info", "Defense queued on " + planet.Coordinate)
     }
-   Sleep(checkInterval * 60 * 1000) 
+    Sleep(checkInterval * 60 * 1000)
 }
