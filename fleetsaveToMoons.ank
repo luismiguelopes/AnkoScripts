@@ -99,6 +99,36 @@ func PickDestination(fromCoord) {
     return dest
 }
 
+// Count of one ship type in a ShipsInfos
+func ShipCount(allShips, shipType) {
+    if shipType == LIGHTFIGHTER { return allShips.LightFighter }
+    if shipType == HEAVYFIGHTER { return allShips.HeavyFighter }
+    if shipType == CRUISER { return allShips.Cruiser }
+    if shipType == BATTLESHIP { return allShips.Battleship }
+    if shipType == SMALLCARGO { return allShips.SmallCargo }
+    if shipType == LARGECARGO { return allShips.LargeCargo }
+    if shipType == COLONYSHIP { return allShips.ColonyShip }
+    if shipType == BATTLECRUISER { return allShips.Battlecruiser }
+    if shipType == BOMBER { return allShips.Bomber }
+    if shipType == DESTROYER { return allShips.Destroyer }
+    if shipType == DEATHSTAR { return allShips.Deathstar }
+    if shipType == RECYCLER { return allShips.Recycler }
+    if shipType == ESPIONAGEPROBE { return allShips.EspionageProbe }
+    if shipType == REAPER { return allShips.Reaper }
+    if shipType == PATHFINDER { return allShips.Pathfinder }
+    return 0
+}
+
+// Adds every flying ship explicitly: SetAllResources only counts the cargo of ships already added
+func AddAllShips(fleet, ships) {
+    for t in [LIGHTFIGHTER, HEAVYFIGHTER, CRUISER, BATTLESHIP, BATTLECRUISER, BOMBER, DESTROYER, DEATHSTAR, SMALLCARGO, LARGECARGO, COLONYSHIP, RECYCLER, ESPIONAGEPROBE, REAPER, PATHFINDER] {
+        n = ShipCount(ships, t)
+        if n > 0 {
+            fleet.AddShips(t, n)
+        }
+    }
+}
+
 // Marks the moon at a coordinate as used
 func MarkUsed(coord) {
     for m in GetCachedMoons() {
@@ -110,7 +140,6 @@ func MarkUsed(coord) {
 }
 
 usedMoons = {}
-pendingRecalls = []             // [fleetID, cancelAt, origin, dest, returnAt]
 
 func Pad2(n) {
     if n < 10 {
@@ -191,14 +220,32 @@ for origin in origins {
 
     secs, _ = FlightTime(origin, dest, fleetSpeed, ships, PARK, 0)
 
+    // Recall: away time = 2 x time until cancel, so cancel halfway to the chosen return time.
+    // SetRecallIn makes the bot do the cancel itself, the script does not have to stay running.
+    recallText = ""
+    recallIn = 0
+    if useRecall {
+        returnAt = returnTarget + Random(-returnSpread * 60, returnSpread * 60)
+        recallIn = Floor((returnAt - GetTimestamp()) / 2)
+        if recallIn + 300 < secs {
+            recallText = " | back ~" + HourText(returnAt)
+        } else {
+            recallIn = 0
+            recallText = " | ⚠️ too short to recall, stays parked"
+        }
+    }
+
     fleet = NewFleet()
     fleet.SetOrigin(origin)
     fleet.SetDestination(dest)
     fleet.SetSpeed(fleetSpeed)
     fleet.SetMission(PARK)
-    fleet.SetAllShips()
+    AddAllShips(fleet, ships)
     if sendResources {
         fleet.SetAllResources()
+    }
+    if recallIn > 0 {
+        fleet.SetRecallIn(recallIn)
     }
     Sleep(Random(1500, 4000))       // "checking the fleet screen"
     fleet, err = fleet.SendNow()
@@ -212,20 +259,7 @@ for origin in origins {
 
     MarkUsed(dest)
     sent = sent + 1
-    line = "" + origin + " ➡️ 🌙 " + dest + " (" + ShortDur(secs) + ")"
-
-    if useRecall {
-        // Away time = 2 x time until cancel, so cancel halfway to the chosen return time
-        now = GetTimestamp()
-        returnAt = returnTarget + Random(-returnSpread * 60, returnSpread * 60)
-        cancelAt = now + Floor((returnAt - now) / 2)
-        if cancelAt - now + 300 < secs {
-            pendingRecalls += [[fleet.ID, cancelAt, origin, dest, returnAt]]
-            line = line + " | back ~" + HourText(returnAt)
-        } else {
-            line = line + " | ⚠️ too short to recall, stays parked"
-        }
-    }
+    line = "" + origin + " ➡️ 🌙 " + dest + " (" + ShortDur(secs) + ")" + recallText
     summary += line
     Notify("info", line)
 
@@ -240,45 +274,3 @@ for line in summary {
     report = report + "\n" + line
 }
 Notify("report", report)
-
-//////////////////////////////////////
-// RECALLS
-
-if useRecall && len(pendingRecalls) > 0 {
-    recalled = 0
-    recallFailed = 0
-    for len(pendingRecalls) > 0 {
-        // Next fleet to cancel
-        next = 0
-        for i = 1; i < len(pendingRecalls); i++ {
-            if pendingRecalls[i][1] < pendingRecalls[next][1] {
-                next = i
-            }
-        }
-        r = pendingRecalls[next]
-        wait = r[1] - GetTimestamp()
-        if wait > 0 {
-            Notify("info", "Next recall (" + r[2] + ") in " + ShortDur(wait))
-            Sleep(wait * 1000)
-        }
-
-        err = CancelFleet(r[0])
-        if err != nil {
-            recallFailed = recallFailed + 1
-            Notify("warn", "Recall " + r[2] + " ➡️ " + r[3] + " failed (fleet stays parked on the moon): " + err)
-        } else {
-            recalled = recalled + 1
-            Notify("info", "Recalled " + r[2] + ", back ~" + HourText(r[4]))
-        }
-
-        remaining = []
-        for i = 0; i < len(pendingRecalls); i++ {
-            if i != next {
-                remaining += [pendingRecalls[i]]
-            }
-        }
-        pendingRecalls = remaining
-        Sleep(Random(2000, 8000))
-    }
-    Notify("report", "🛡️ Recalls done. Recalled: " + recalled + " | Failed: " + recallFailed + ". Fleets are flying home.")
-}
