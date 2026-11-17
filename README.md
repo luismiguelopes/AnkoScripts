@@ -26,7 +26,6 @@ AnkoScripts is a comprehensive automation toolkit for OGame players who want to 
   - Automatically sends colony ships to random locations
   - Abandons colonies with less than 290 fields
   - Includes safety delays and Telegram notifications
-  - Requires planets to be sorted by colonization date
 
 - **`farmBot.ank`** - Farming automation with realistic work patterns
   - Simulates human-like work schedules

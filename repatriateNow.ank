@@ -1,20 +1,22 @@
-// Helper function to start a script and wait for its completion (with periodic checks)
+//////////////////////////////////////
+// SETTINGS
+
+arrivalWaitMinutes = 5   // extra wait after moonsToPlanets so its fleets land before planetsToMoons
+
+//////////////////////////////////////
+
+// Start a script and wait for it to finish (checks every 5 min)
 func StartAndWait(scriptName) {
     StartScript(scriptName)
     Sleep(5*60*1000)
-    while IsScriptRunning(scriptName) == true {
+    for IsScriptRunning(scriptName) == true {
         Sleep(5*60*1000)
     }
 }
 
 // Main logic
 StartAndWait("moonsToPlanets.ank")
+// The script ends right after the last send; give those fleets time to arrive
+Sleep(arrivalWaitMinutes * 60 * 1000)
 StartAndWait("planetsToMoons.ank")
 RepatriateNow()
-
-
-
-
-
-
-

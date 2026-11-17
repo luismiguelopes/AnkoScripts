@@ -23,16 +23,42 @@ keepShips = {
     // Add other ship types as needed
 }
 
-// Function to get all moons with ships to jump (excluding homeworld)
+// The moon at the homeworld's position (jump gates only connect moons), or nil
+func GetHomeMoon() {
+    hc = GetHomeWorld().Coordinate
+    for moon in GetCachedMoons() {
+        c = moon.Coordinate
+        if c.Galaxy == hc.Galaxy && c.System == hc.System && c.Position == hc.Position {
+            return moon
+        }
+    }
+    return nil
+}
+
+homeMoon = GetHomeMoon()
+if homeMoon == nil {
+    SendTelegram(TELEGRAM_CHAT_ID, "⚠️ Jump Gate: homeworld has no moon, leftover moons won't be jumped home")
+}
+
+// Jump leftover ships to the home moon
+func JumpHome(originID, ships, coordFrom) {
+    if homeMoon == nil {
+        SendTelegram(TELEGRAM_CHAT_ID, "Skipped " + coordFrom + ": no home moon to jump to")
+        return
+    }
+    DoJump(originID, homeMoon.GetID(), ships, coordFrom, homeMoon.Coordinate)
+}
+
+// Function to get all moons with ships to jump (excluding the home moon)
 func GetMoonsWithShipsToJump() {
     moonsWithShips = []
     shipsToJump = []
     coords = []
     moons = GetCachedMoons()
-    
+
     for moon in moons {
-        // Skip homeworld
-        if moon.Coordinate == GetHomeWorld().Coordinate {
+        // Skip the home moon
+        if homeMoon != nil && moon.GetID() == homeMoon.GetID() {
             continue
         }
         
@@ -126,8 +152,8 @@ func dowork() {
 
     // If only one moon, send to homeworld
     if x == 1 {
-        DoJump(ids[0], GetHomeWorld().GetID(), shipsList[0], coords[0], GetHomeWorld().Coordinate)
-        SendTelegram(TELEGRAM_CHAT_ID, "Single moon sent to homeworld")
+        JumpHome(ids[0], shipsList[0], coords[0])
+        SendTelegram(TELEGRAM_CHAT_ID, "Single moon sent to home moon")
         StopScript("jumpGate.ank")
         return
     }
@@ -137,9 +163,9 @@ func dowork() {
         DoJump(ids[i], ids[i+1], shipsList[i], coords[i], coords[i+1])
     }
     
-    // If odd number, send last to homeworld
+    // If odd number, send last to the home moon
     if x % 2 == 1 {
-        DoJump(ids[x-1], GetHomeWorld().GetID(), shipsList[x-1], coords[x-1], GetHomeWorld().Coordinate)
+        JumpHome(ids[x-1], shipsList[x-1], coords[x-1])
     }
 }
 

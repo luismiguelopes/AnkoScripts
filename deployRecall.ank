@@ -1,77 +1,101 @@
-// Settings
-telegramId = TELEGRAM_CHAT_ID
+//////////////////////////////////////
+// SETTINGS
+
+sendFrom = GetHomeWorld()                   // planet/moon to fleetsave from (or "M:1:2:3")
+sendTo = NewCoordinate(0, 0, 0, PLANET_TYPE) // EDIT: fleetsave target
+fleetSpeed = TEN_PERCENT                    // TEN_PERCENT ... HUNDRED_PERCENT
+
+// The fleet is back home at a random time between these hours tomorrow
+returnFromHour = 10
+returnToHour = 11
+timezoneOffsetHours = 1                     // server time minus UTC (was the old "- 3600")
+
+//////////////////////////////////////
 
 UserName = GetCachedPlayer().PlayerName
 UniverseName = GetUniverseName()
 
-sendFrom = ""
-sendTo = "" // Fleet target (adjust as needed)
-fleetSpeed = TEN_PERCENT // You can adjust: TWENTY_PERCENT ... HUNDRED_PERCENT
-
-// Choose random arrival time between 09:00 and 10:00
-targetHour = Random(10, 11)
-targetMinute = Random(0, 59)
-targetSecond = Random(0, 59)
-
-// Function to create a timestamp from date and time
-func UnixFromDateTime(y, m, d, h, min, s) {
-    base = Unix(0, 0)
-    t = base.AddDate(y - 1970, m - 1, d - 1)
-    dateOnly = t.Unix()
-    secondsInDay = h * 3600 + min * 60 + s
-    return dateOnly + secondsInDay
+func Notify(msg) {
+    Print(msg)
+    SendTelegram(TELEGRAM_CHAT_ID, UserName + " (" + UniverseName + ") ::: " + msg)
 }
 
-// Get today's date and current timestamp
+func Pad2(n) {
+    if n < 10 {
+        return "0" + n
+    }
+    return "" + n
+}
+
+// Timestamp for a date at midnight (UTC) plus secondsInDay
+func UnixFromDate(y, m, d, secondsInDay) {
+    t = Unix(0, 0).AddDate(y - 1970, m - 1, d - 1)
+    return t.Unix() + secondsInDay
+}
+
+if sendTo.Galaxy == 0 {
+    Notify("❌ deployRecall: set sendTo in the settings first")
+    return
+}
+origin = GetCachedCelestial(sendFrom)
+if origin == nil {
+    Notify("❌ deployRecall: " + sendFrom + " is not one of your planets/moons")
+    return
+}
+
+// Pick the return time tomorrow
+returnSecondOfDay = Random(returnFromHour * 3600, returnToHour * 3600)
 year, month, day = Date()
 now = GetTimestamp()
+returnTimestamp = UnixFromDate(year, month, day + 1, returnSecondOfDay) - timezoneOffsetHours * 3600
+delta = returnTimestamp - now
 
-// Create arrival timestamp for tomorrow
-arrivalTimestamp = UnixFromDateTime(year, month, day+1, targetHour, targetMinute, targetSecond)
-delta = arrivalTimestamp - now - 3600
+// Outbound until cancel + same time back = delta, so cancel halfway
+waitBeforeCancel = delta / 2
 
-// Cancel in the middle of the way (outbound + return, so 50%)
-waitBeforeCancel = delta/2
+// The fleet must still be in the air when we cancel, or it lands at the target
+ships, err = origin.GetShips()
+if err != nil {
+    Notify("❌ deployRecall: could not read ships: " + err)
+    return
+}
+oneWaySecs, _ = FlightTime(origin.GetCoordinate(), sendTo, fleetSpeed, ships)
+if oneWaySecs <= waitBeforeCancel + 300 {
+    Notify("❌ deployRecall aborted: one-way flight is " + ShortDur(oneWaySecs) + " but the cancel happens after " + ShortDur(waitBeforeCancel) + ". Pick a farther target or a slower speed.")
+    return
+}
 
-Print("Now is:", year, "-", month, "-", day)
-Print("Current time:", Clock())
-Print("Current timestamp:", now)
-Print("Target timestamp:", arrivalTimestamp)
-Print("Total fleetsave:", ShortDur(delta))
-Print("Cancel in:", ShortDur(waitBeforeCancel))
+returnText = Pad2(returnSecondOfDay / 3600) + ":" + Pad2((returnSecondOfDay % 3600) / 60)
+Print("Now:", Clock(), "| Total fleetsave:", ShortDur(delta), "| Cancel in:", ShortDur(waitBeforeCancel), "| One-way flight:", ShortDur(oneWaySecs))
 
-SendTelegram(telegramId, UserName + " (" + UniverseName + ") ::: 🚀 FleetSave started")
-SendTelegram(telegramId, "Expected arrival tomorrow at " + targetHour + ":" + targetMinute)
-SendTelegram(telegramId, "Cancel in " + ShortDur(waitBeforeCancel))
-
-// Create and send fleet
 fleet = NewFleet()
-fleet.SetOrigin(sendFrom)
+fleet.SetOrigin(origin)
 fleet.SetDestination(sendTo)
 fleet.SetSpeed(fleetSpeed)
 fleet.SetMission(PARK)
 fleet.SetAllResources()
 fleet.SetAllShips()
 fleet, err = fleet.SendNow()
-
 if err != nil {
-    Print("Error sending fleet:", err)
-    SendTelegram(telegramId, "❌ Error sending fleet.")
+    LogError(err)
+    Notify("❌ Error sending fleetsave: " + err)
     return
 }
+Notify("🚀 FleetSave sent from " + origin.GetCoordinate() + ". Back tomorrow around " + returnText + ". Cancel in " + ShortDur(waitBeforeCancel))
 
-// Wait until the moment to cancel
 Sleep(waitBeforeCancel * 1000)
 
-// Cancel fleet
-CancelFleet(fleet.ID)
-Print("Fleet canceled successfully!")
-SendTelegram(telegramId, "🛑 Fleet canceled. Will arrive tomorrow around " + targetHour + ":" + targetMinute)
+err = CancelFleet(fleet.ID)
+if err != nil {
+    LogError(err)
+    Notify("❌ Could not cancel the fleetsave: " + err + ". Check the fleet manually!")
+    return
+}
+Notify("🛑 Fleet canceled. Back tomorrow around " + returnText)
 
-// Logout and return (simulate human behavior)
+// Log out while the fleet returns (human-like)
 Sleep(Random(3000, 8000))
 Logout()
 Sleep(Random(waitBeforeCancel * 800, waitBeforeCancel * 900))
 Login()
-
-SendTelegram(telegramId, "✅ Logged in again. I'm back.")
+Notify("✅ Logged in again. I'm back.")

@@ -28,10 +28,23 @@ SendAll(intro)
 
 planets = GetCachedPlanets()
 
+// Positions that have a moon ("galaxy:system:position")
+moonPositions = {}
+for moon in GetCachedMoons() {
+    c = moon.Coordinate
+    moonPositions["" + c.Galaxy + ":" + c.System + ":" + c.Position] = true
+}
+
 // Simulate initial planning time
 Sleep(Random(3000, 7000))
 
 for planet in planets {
+
+    pc = planet.Coordinate
+    if moonPositions["" + pc.Galaxy + ":" + pc.System + ":" + pc.Position] != true {
+        Print("No moon at " + pc + ", skipping")
+        continue
+    }
 
     Print("🧠 Analyzing planet: " + planet.Coordinate)
     Sleep(Random(1500, 3000))  // Human analysis time

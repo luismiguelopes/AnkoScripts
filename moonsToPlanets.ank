@@ -33,12 +33,25 @@ for moon in moons {
     // Simulate a human-like analysis pause
     Sleep(Random(1000, 3000))
 
+    // Send the Large Cargos that are actually on the moon
+    allShips, err = GetCachedCelestial(origin).GetShips()
+    if err != nil {
+        LogError(err)
+        SendAll("⚠️ Could not read ships on " + origin + ": " + err)
+        continue
+    }
+    lcToSend = allShips.LargeCargo
+    if lcToSend == 0 {
+        Print("No Large Cargos on " + origin + ", skipping")
+        continue
+    }
+
     // Fleet creation
     fleet = NewFleet()
     fleet.SetOrigin(origin)
     fleet.SetDestination(destination)
     fleet.SetMission(PARK)
-    fleet.AddShips(LARGECARGO, 5000)
+    fleet.AddShips(LARGECARGO, lcToSend)
 
     // Fleet dispatch
     fleet, err = fleet.SendNow()
@@ -49,7 +62,7 @@ for moon in moons {
         SendAll(errorMsg)
         Sleep(Random(1000, 2000))
     } else {
-        successMsg = "✅ Fleet sent successfully!\n🌙 From: " + origin + "\n🪐 To: " + destination + "\n🚚 Mission: Park"
+        successMsg = "✅ Fleet sent successfully!\n🌙 From: " + origin + "\n🪐 To: " + destination + "\n🚚 " + lcToSend + " LC, Mission: Park"
         fsMade += 1
         SendAll(successMsg)
         Sleep(Random(7000, 15000))  // More human-like delay

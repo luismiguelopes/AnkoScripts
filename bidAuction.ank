@@ -5,8 +5,8 @@ highestBid = 2000000                //what is the maximum bid
 metBid = true                       //should you bid with metal?
 crysBid = false                     //should you bid with crystal?
 deutBid = false                     //should you bid with deuterium?
-bidHome = GetHomeWorld()             //from which planet should be bid?
-ownAlliance = ""
+bidHome = GetHomeWorld()            //from which planet should be bid?
+ownAlliance = ""                    //your alliance name; never outbid its members ("" = disabled)
 
 //######################################## SETTINGS END ########################################
 
@@ -18,27 +18,24 @@ if celt == nil {
     return
 }
 
-
-func allianceName() {
-
-x, _ = GetAuction()
-UserID = x.HighestBidderUserID
-GalaxyNumber =  GetPlayerCoordinates(UserID)[0].Galaxy
-SystemNumber = GetPlayerCoordinates(UserID)[0].System
-PositionNumber = GetPlayerCoordinates(UserID)[0].Position
-systemInfos, _ = GalaxyInfos(GalaxyNumber, SystemNumber)
-planetInfo = systemInfos.Position(PositionNumber)
-        if planetInfo.Alliance.Name == ownAlliance {
-            LogWarn("A member of your alliance already bid: " + x.HighestBidder)
-            return refreshTime(auc.Endtime)
-        }    
-    
+// True when the current highest bidder belongs to ownAlliance
+func isAllyLeading(auc) {
+    if ownAlliance == "" || auc.NumBids == 0 {
+        return false
+    }
+    playerCoords = GetPlayerCoordinates(auc.HighestBidderUserID)
+    if len(playerCoords) == 0 {
+        return false
+    }
+    c = playerCoords[0]
+    systemInfos, err = GalaxyInfos(c.Galaxy, c.System)
+    if err != nil {
+        LogError(err)
+        return false
+    }
+    planetInfo = systemInfos.Position(c.Position)
+    return planetInfo != nil && planetInfo.Alliance != nil && planetInfo.Alliance.Name == ownAlliance
 }
-
-
-
-
-
 
 func AucDo(ress) {
     bid = {}
@@ -52,28 +49,23 @@ func AucDo(ress) {
     return DoAuction(bid)
 }
 
+// Seconds to wait before checking again, based on time left
 func refreshTime(TimeEnd) {
-    switch TimeEnd {     
-        case TimeEnd <= 300:                    //5 min
+    if TimeEnd <= 300 {                     //5 min
         LogDebug("Only 5 min")
         return Random(0, 1)
-
-        case TimeEnd <= 600:                    //10 min
-        LogDebug("Only 10 Min")                        
+    } else if TimeEnd <= 600 {              //10 min
+        LogDebug("Only 10 Min")
         return Random(60, 120)
-
-        case TimeEnd <= 1800:                   //30 min
-        LogDebug("Only 30 Min")                        
+    } else if TimeEnd <= 1800 {             //30 min
+        LogDebug("Only 30 Min")
         return Random(180, 300)
-
-        case TimeEnd <= 3600:                   //60 min
-        LogDebug("Only 60 Min")                        
+    } else if TimeEnd <= 3600 {             //60 min
+        LogDebug("Only 60 Min")
         return Random(300, 600)
-
-        default:
-        LogError("Unknown TimeEnd value", TimeEnd)
-        return Random(5, 10)
     }
+    // More than an hour left: wake up around the 60 min mark
+    return TimeEnd - 3600 + Random(0, 60)
 }
 
 func customSleep(sleepTime) {
@@ -110,14 +102,10 @@ func processAuction() {
         LogInfo("You are the highest bidder!")
         return refreshTime(auc.Endtime)
     }
-
-    if (auc.HighestBidderUserID != ownPlayerID) && (auc.NumBids != 0) {
-        
-        allianceName()
-
-
-    }    
-    
+    if isAllyLeading(auc) {
+        LogWarn("A member of your alliance is the highest bidder: " + auc.HighestBidder)
+        return refreshTime(auc.Endtime)
+    }
     if auc.MinimumBid > highestBid {
         LogInfo("Resources exceeded! Wait until the next auction!")
         return auc.Endtime + 10
@@ -133,10 +121,6 @@ func processAuction() {
     return refreshTime(auc.Endtime)
 }
 
-func doWork() {
-    for { // forever process auctions
-        sleepTime = processAuction()
-        customSleep(sleepTime)
-    }
+for { // forever process auctions
+    customSleep(processAuction())
 }
-doWork()

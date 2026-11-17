@@ -18,21 +18,28 @@ ion_cannon_desired=  50
 plasma_desired= 50
 anti_balistic_desired = 20
 
-checkInterval = 30 // Check every 5 min -- also change this to your liking, but 5 min is fine, if not to low
+checkInterval = 30 // Minutes between checks
 // SETTINGS DONE----------------------------------------------------------------
 
 Planets = GetPlanets()
 
-//ERROR HANDLER
-//This is will spit out an error and stop the script, if you have more or less values in factors than actual planets
-if(len(factors) != len(Planets)){
-    print("You don't have as many factor entries as you have Planets!!")
+// One factor per planet is required, otherwise planets would get the wrong defense
+if len(factors) < len(Planets) {
+    LogError("buildDef: " + len(factors) + " factors but " + len(Planets) + " planets. Add a factor for every planet.")
+    SendTelegram(TELEGRAM_CHAT_ID, "❌ buildDef stopped: " + len(factors) + " factors for " + len(Planets) + " planets")
+    return
 }
-factors[len(Planets)-1]
+if len(factors) > len(Planets) {
+    LogWarn("buildDef: more factors (" + len(factors) + ") than planets (" + len(Planets) + "). Extra factors are ignored.")
+}
 
 for{
-    i=0;
-    for planet in Planets {
+    for i = 0; i < len(Planets); i++ {
+        planet = Planets[i]
+        // Factor 0 = no defense at all on this planet
+        if factors[i] == 0 {
+            continue
+        }
         celestial = GetCachedCelestial(planet.Coordinate)
         allDefense, _ = celestial.GetDefense()
         
@@ -66,7 +73,6 @@ for{
                celestial.Build(ANTIBALLISTICMISSILES,Round(anti_balistic_desired*factors[i]) - allDefense.AntiBallisticMissiles )
             }
         }
-        i = i+1
     }
    Sleep(checkInterval * 60 * 1000) 
 }

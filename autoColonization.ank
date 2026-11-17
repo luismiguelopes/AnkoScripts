@@ -1,120 +1,90 @@
-///////////////////////////////////////////////////////
-
-
-UserName = GetCachedPlayer().PlayerName
-UniverseName = GetUniverseName()
-
-
-///////////////////////////////////////////////////////
-
-//Sleep(5*60*1000)
-
-/* Setup *////////////////////////////////////////////////////////
-
-
-/*///////////////////////////////////////////////////////*
-*                                                        *
-*               GLOBAL VARIABLES                         *
-*                                                        *
-*/////////////////////////////////////////////////////// *
-
-
-
-func message() {
-SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName + ")" )
-SendTelegram(TELEGRAM_CHAT_ID, "" )
-SendTelegram(TELEGRAM_CHAT_ID, "/*///////////////////////////////////////////////////////* \n *                                                                                             *\n*                                       WARNING                                  *\n*                                                                                              *\n*/////////////////////////////////////////////////////// *")
-SendTelegram(TELEGRAM_CHAT_ID, "" )
-SendTelegram(TELEGRAM_CHAT_ID, "In order to properly run this script you need to sort your planets by date of colonization.\n This is Mandatory otherwise you probably will remove your old colonies that you might don't want.\n For security purposes the script will run after 5 minutes." )
-}
-
-func sentColonization() {
-origin = GetHomeWorld()
+//////////////////////////////////////
+// SETTINGS
 
 destinationGalaxy = 3
 minSystem = 240
 maxSystem = 260
-
 minPosition = 7
 maxPosition = 9
 
-/*///////////////////////////////////////////////////////*
-*                                                        *
-*                   SCRIPT                               *
-*                                                        *
-*/////////////////////////////////////////////////////// *
+minFields = 290          // colonies with fewer fields are abandoned
+maxFailedSends = 10      // consecutive failed sends before the script gives up
+startDelayMinutes = 5    // safety delay before the first send
 
+//////////////////////////////////////
 
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
 
-//SendTelegram(TELEGRAM_CHAT_ID, "Experimental: Advanced Colonization by Vempire")
+func Notify(msg) {
+    Print(msg)
+    SendTelegram(TELEGRAM_CHAT_ID, UserName + " (" + UniverseName + ") ::: " + msg)
+}
 
-randomSystem = Random(minSystem, maxSystem)
-randomPosition = Random(minPosition, maxPosition)              
-                
-                destination = NewCoordinate(destinationGalaxy, randomSystem, randomPosition, PLANET_TYPE)
-                fleet = NewFleet()
-                fleet.SetOrigin(origin)
-                fleet.SetDestination(destination)
-                fleet.SetMission(COLONIZE)
-                fleet.AddShips(COLONYSHIP, 1)
-                fleet, err = fleet.SendNow()
-                
-            if err != nil {
-           // LogError(err)
-           // SendTelegram(TELEGRAM_CHAT_ID, " " +destinationGalaxy+ ":" +randomSystem+ ":" +randomPosition + ":::" +err)
-            Sleep(2*1000)
-            sentColonization()
+// Returns our planet at the given coordinate, or nil
+func FindPlanetAt(coord) {
+    for p in GetPlanets() {
+        c = p.Coordinate
+        if c.Galaxy == coord.Galaxy && c.System == coord.System && c.Position == coord.Position {
+            return p
+        }
+    }
+    return nil
+}
+
+origin = GetHomeWorld()
+
+Notify("AutoColonization starts in " + startDelayMinutes + " min. Target: G" + destinationGalaxy + " systems " + minSystem + "-" + maxSystem + " positions " + minPosition + "-" + maxPosition + ", min fields " + minFields)
+Sleep(startDelayMinutes * 60 * 1000)
+
+failedSends = 0
+for {
+    destination = NewCoordinate(destinationGalaxy, Random(minSystem, maxSystem), Random(minPosition, maxPosition), PLANET_TYPE)
+
+    // Never target a spot we already own
+    if FindPlanetAt(destination) != nil {
+        continue
+    }
+
+    fleet = NewFleet()
+    fleet.SetOrigin(origin)
+    fleet.SetDestination(destination)
+    fleet.SetMission(COLONIZE)
+    fleet.AddShips(COLONYSHIP, 1)
+    fleet, err = fleet.SendNow()
+
+    if err != nil {
+        failedSends = failedSends + 1
+        LogError(err)
+        if failedSends >= maxFailedSends {
+            Notify("❌ Stopping: " + failedSends + " failed sends in a row. Last error: " + err)
             break
-            }
+        }
+        Sleep(Random(2000, 5000))
+        continue
+    }
+    failedSends = 0
 
+    ships = NewShipsInfos()
+    ships.Set(COLONYSHIP, 1)
+    secs, _ = FlightTime(origin.GetCoordinate(), destination, HUNDRED_PERCENT, *ships)
+    Notify("ColonyShip sent to " + destination + ". Arrival in " + (secs / 60) + " min")
+    Sleep((secs + 15) * 1000)
 
-ships = NewShipsInfos()
-ships.Set(COLONYSHIP, 1)
-secs, fuel = FlightTime(origin.GetCoordinate(), destination, HUNDRED_PERCENT, *ships)
-print(secs)
-minutes = secs/60
-SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName + ") ::: ColonyShip Sent to: " +destinationGalaxy+ ":" +randomSystem+ ":" +randomPosition)
-SendTelegram(TELEGRAM_CHAT_ID, "Wait: "+minutes+ " minutes")
+    // Only ever touch the planet at the destination coordinate
+    colony = FindPlanetAt(destination)
+    if colony == nil {
+        Notify("⚠️ No colony at " + destination + " after arrival (spot taken?). Trying another spot.")
+        continue
+    }
 
-secs = secs + 15
+    totalFields = GetCachedCelestial(colony.ID).GetFields().Total
+    if totalFields < minFields {
+        Abandon(colony.ID)
+        Notify("🗑️ Abandoned " + destination + ": only " + totalFields + " fields")
+        continue
+    }
 
-Sleep(secs*1000)
-
-
-//////////////////////////////////////////////////////
-planets = GetPlanets()
-lastID = planets[len(planets)-1].ID
-print(lastID)
-lastPlanet = GetCachedCelestial(lastID)
-totalFields = lastPlanet.GetFields().Total
-print(totalFields)
-coords = lastPlanet.Coordinate
-//////////////////////////////////////////////////////
-
-
-
-
-if totalFields < 290 {
-    
-    Abandon(lastID)
-    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName + ") ::: The new colony was been deleted, because has only: " +totalFields )
-    init()
-} else {
-
-    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName + ") TESTE ::: " +coords+ " : New colony set with: " +totalFields+ " fields" )
-    
+    Notify("✅ New colony kept at " + destination + " with " + totalFields + " fields")
     break
 }
-
-
-}
-
-func init(){
-    sentColonization()
-}
-
-message()
-Sleep(5*60*1000)
-init()
-
-

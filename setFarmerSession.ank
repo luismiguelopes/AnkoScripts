@@ -1,6 +1,8 @@
 import "math/rand"
 import "math"
 
+// NOTE: every run creates new farm sessions. Delete the old ones in the bot before running again.
+
 // Example of origins per galaxy (adapt for your planets/moons)
 origins = [
     [GetHomeWorld()], // Galaxy 1
@@ -10,16 +12,20 @@ origins = [
     ["M:5:381:15"]
 ]
 
-// Function to extract the system from an origin like "M:2:100:10"
+// System of an origin. Works with "M:2:100:10" strings and with celestials like GetHomeWorld()
 func GetSystem(origin) {
-    parts = strings.Split(origin, ":")
-    return int(parts[2])
+    celestial = GetCachedCelestial(origin)
+    if celestial == nil {
+        LogError("Origin " + origin + " is not one of your planets/moons")
+        return -1
+    }
+    return celestial.GetCoordinate().System
 }
 
 // Circular distance between two systems (1-499)
 func CircularDistance(a, b) {
     d = math.Abs(float64(a - b))
-    return math.Min(d, 499 - d + 1)
+    return math.Min(d, 499 - d)
 }
 
 func CreateFarmSession(origin, galaxy, start, end, fastAttacking) {
@@ -47,7 +53,7 @@ func CreateFarmSession(origin, galaxy, start, end, fastAttacking) {
 for g = 1; g <= 5; g++ {
     galOrigins = origins[g-1]
     start = 1
-    while start <= 499 {
+    for start <= 499 {
         size = rand.Intn(100) + 50 // 50-149
         end = start + size - 1
         if end > 499 {
@@ -60,6 +66,9 @@ for g = 1; g <= 5; g++ {
         bestOrigin = galOrigins[0]
         for o = 0; o < len(galOrigins); o++ {
             sys = GetSystem(galOrigins[o])
+            if sys < 0 {
+                continue
+            }
             dist = CircularDistance(sys, center)
             if dist < minDist {
                 minDist = dist

@@ -17,8 +17,18 @@ func SendStatus(msg) {
 }
 
 func FleetSaveFromMoon(moon) {
-    resources, err = moon.GetResources()
     origin = moon.Coordinate
+    // The Colonize mission needs at least one colony ship in the fleet
+    ships, err = GetCachedCelestial(origin).GetShips()
+    if err != nil {
+        LogError(err)
+        SendTelegram(telegramId, origin + " Error reading ships: " + err)
+        return false
+    }
+    if ships.ColonyShip == 0 {
+        SendTelegram(telegramId, "⚠️ " + origin + " skipped: no colony ship on this moon")
+        return false
+    }
     destination = NewCoordinate(origin.Galaxy, origin.System + systemOffset, 1, PLANET_TYPE)
     fleet = NewFleet()
     fleet.SetOrigin(origin)
