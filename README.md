@@ -62,7 +62,7 @@ Every script is standalone. Open it, adjust the `SETTINGS` block at the top and 
 
 - OGame account
 - Ninja Bot with scripting enabled
-- Telegram configured in the bot (optional, for notifications)
+- Telegram and/or a Discord webhook configured in the bot (optional, for notifications; Discord uses the bot-provided `DISCORD_WEBHOOK`)
 
 ## 📖 Usage
 
@@ -89,14 +89,14 @@ Every script has the same layout:
 
 `Notify` levels:
 
-| Level | Bot log | Telegram |
+| Level | Bot log | Telegram + Discord |
 |---|---|---|
 | `info` | ✅ | - |
 | `report` | ✅ | ✅ |
 | `warn` | ✅ | ✅ |
 | `error` | ✅ | ✅ |
 
-Per-item events (each fleet sent, each jump) are `info`, so Telegram only gets start/end summaries, warnings and errors.
+Per-item events (each fleet sent, each jump) are `info`, so Telegram and Discord only get start/end summaries, warnings and errors.
 
 Human-like behavior is built in: random delays between actions, occasional longer pauses, random order and random times. Keep it when editing.
 

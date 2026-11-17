@@ -10,7 +10,7 @@ fleetSpeed = FOURTY_PERCENT
 UserName = GetCachedPlayer().PlayerName
 UniverseName = GetUniverseName()
 
-// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+// level: "info" = bot log only | "report" = log + Telegram + Discord | "warn" / "error" = log + Telegram + Discord
 func Notify(level, msg) {
     text = UserName + " (" + UniverseName + ") ::: " + msg
     if level == "error" {
@@ -22,6 +22,13 @@ func Notify(level, msg) {
     }
     if level != "info" {
         SendTelegram(TELEGRAM_CHAT_ID, text)
+        // DISCORD_WEBHOOK comes from the bot settings; try keeps the script alive if it is not set
+        try {
+            if DISCORD_WEBHOOK != "" {
+                SendDiscord(DISCORD_WEBHOOK, text)
+            }
+        } catch {
+        }
     }
 }
 
