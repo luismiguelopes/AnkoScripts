@@ -65,7 +65,8 @@ func CollectFrom(planet) {
         Notify("error", "Could not read ships on " + origin + ": " + err)
         return 0
     }
-    needed = int((total + lcCapacity - 1) / lcCapacity)
+    roundedUp = total + lcCapacity - 1
+    needed = (roundedUp - roundedUp % lcCapacity) / lcCapacity
     lc = ships.LargeCargo
     if lc == 0 {
         Notify("warn", origin + " has " + Dotify(total) + " resources but no Large Cargos")

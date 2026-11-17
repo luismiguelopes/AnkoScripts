@@ -120,7 +120,8 @@ func Pad2(n) {
 // "HH:MM" (server time) of a timestamp
 func HourText(ts) {
     secOfDay = (ts + timezoneOffsetHours * 3600) % 86400
-    return Pad2(int(secOfDay / 3600)) + ":" + Pad2(int((secOfDay % 3600) / 60))
+    secOfHour = secOfDay % 3600
+    return Pad2((secOfDay - secOfHour) / 3600) + ":" + Pad2((secOfHour - secOfHour % 60) / 60)
 }
 
 // Next return window: today if it is still at least 1h away, otherwise tomorrow
@@ -215,7 +216,8 @@ for origin in origins {
         // Away time = 2 x time until cancel, so cancel halfway to the chosen return time
         now = GetTimestamp()
         returnAt = Random(windowStart, windowEnd)
-        cancelAt = now + int((returnAt - now) / 2)
+        away = returnAt - now
+        cancelAt = now + (away - away % 2) / 2
         if cancelAt - now + 300 < secs {
             pendingRecalls += [[fleet.ID, cancelAt, origin, dest, returnAt]]
             line = line + " | back ~" + HourText(returnAt)
