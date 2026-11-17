@@ -1,9 +1,8 @@
 ///////////////////////////////////////////////////////
 
 
-UserName = GetUserInfos().PlayerName
+UserName = GetCachedPlayer().PlayerName
 UniverseName = GetUniverseName()
-Language = GetLanguage()
 
 
 ///////////////////////////////////////////////////////
@@ -22,7 +21,7 @@ Language = GetLanguage()
 
 
 func message() {
-SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ")" )
+SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName + ")" )
 SendTelegram(TELEGRAM_CHAT_ID, "" )
 SendTelegram(TELEGRAM_CHAT_ID, "/*///////////////////////////////////////////////////////* \n *                                                                                             *\n*                                       WARNING                                  *\n*                                                                                              *\n*/////////////////////////////////////////////////////// *")
 SendTelegram(TELEGRAM_CHAT_ID, "" )
@@ -74,7 +73,7 @@ ships.Set(COLONYSHIP, 1)
 secs, fuel = FlightTime(origin.GetCoordinate(), destination, HUNDRED_PERCENT, *ships)
 print(secs)
 minutes = secs/60
-SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: ColonyShip Sent to: " +destinationGalaxy+ ":" +randomSystem+ ":" +randomPosition)
+SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName + ") ::: ColonyShip Sent to: " +destinationGalaxy+ ":" +randomSystem+ ":" +randomPosition)
 SendTelegram(TELEGRAM_CHAT_ID, "Wait: "+minutes+ " minutes")
 
 secs = secs + 15
@@ -98,11 +97,11 @@ coords = lastPlanet.Coordinate
 if totalFields < 290 {
     
     Abandon(lastID)
-    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: The new colony was been deleted, because has only: " +totalFields )
+    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName + ") ::: The new colony was been deleted, because has only: " +totalFields )
     init()
 } else {
 
-    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ") TESTE ::: " +coords+ " : New colony set with: " +totalFields+ " fields" )
+    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName + ") TESTE ::: " +coords+ " : New colony set with: " +totalFields+ " fields" )
     
     break
 }

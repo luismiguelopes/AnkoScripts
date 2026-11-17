@@ -1,9 +1,8 @@
 //////////////////////////////////////
 // Settings
 
-UserName = GetUserInfos().PlayerName
+UserName = GetCachedPlayer().PlayerName
 UniverseName = GetUniverseName()
-Language = GetLanguage()
 telegramId = TELEGRAM_CHAT_ID
 
 // Parameters
@@ -14,7 +13,7 @@ fleetSpeed = FOURTY_PERCENT
 // Helper functions
 
 func SendStatus(msg) {
-    SendTelegram(telegramId, UserName + " (" + UniverseName + "|" + Language + ") ::: " + msg)
+    SendTelegram(telegramId, UserName + " (" + UniverseName + ") ::: " + msg)
 }
 
 func FleetSaveFromMoon(moon) {

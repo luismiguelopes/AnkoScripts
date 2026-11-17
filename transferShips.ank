@@ -3,7 +3,6 @@
 
 //
 UniverseName = GetUniverseName()
-Language = GetLanguage()
 
 // Telegram ID
 telegramId = TELEGRAM_CHAT_ID

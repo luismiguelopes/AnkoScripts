@@ -1,0 +1,69 @@
+//////////////////////////////////////
+// SETTINGS
+
+lcPerPlanet = 1000          // Large Cargos to send to each planet
+fleetSpeed = HUNDRED_PERCENT
+minDelay = 8000             // ms between sends (min)
+maxDelay = 20000            // ms between sends (max)
+
+//////////////////////////////////////
+
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+telegramId = TELEGRAM_CHAT_ID
+
+func SendAll(msg) {
+    Print(msg)
+    SendTelegram(telegramId, UserName + " (" + UniverseName + ") ::: " + msg)
+}
+
+home = GetHomeWorld()
+homeCelestial = GetCachedCelestial(home.Coordinate)
+homeShips, err = homeCelestial.GetShips()
+if err != nil {
+    SendAll("❌ Could not read homeworld ships: " + err)
+    return
+}
+available = homeShips.LargeCargo
+
+SendAll("🚀 Homeworld ➡️ Planets started. " + lcPerPlanet + " LC per planet, " + available + " LC available on " + home.Coordinate)
+
+sent = 0
+for planet in GetCachedPlanets() {
+    // Skip the homeworld itself
+    if planet.GetID() == home.GetID() {
+        continue
+    }
+
+    if available < lcPerPlanet {
+        SendAll("⚠️ Not enough LC left (" + available + "), stopping before " + planet.Coordinate)
+        break
+    }
+
+    fleet = NewFleet()
+    fleet.SetOrigin(home.Coordinate)
+    fleet.SetDestination(planet.Coordinate)
+    fleet.SetSpeed(fleetSpeed)
+    fleet.SetMission(PARK)
+    fleet.AddShips(LARGECARGO, lcPerPlanet)
+    fleet, err = fleet.SendNow()
+
+    if err != nil {
+        LogError(err)
+        SendAll("❌ " + home.Coordinate + " ➡️ " + planet.Coordinate + " failed: " + err)
+        Sleep(Random(2000, 5000))
+        continue
+    }
+
+    available = available - lcPerPlanet
+    sent = sent + 1
+    SendAll("✅ " + lcPerPlanet + " LC ➡️ " + planet.Coordinate)
+
+    Sleep(Random(minDelay, maxDelay))
+    // Occasional longer pause to look natural
+    if Random(1, 100) > 85 {
+        Sleep(Random(10000, 25000))
+    }
+}
+
+SendAll("🏁 Done. Fleets sent: " + sent + " | LC left on homeworld: " + available)

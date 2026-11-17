@@ -1,7 +1,6 @@
 ///////////////////////////////////////////////////////
-UserName = GetUserInfos().PlayerName
+UserName = GetCachedPlayer().PlayerName
 UniverseName = GetUniverseName()
-Language = GetLanguage()
 
 ///////////////////////////////////////////////////////
 //Hours number
@@ -12,7 +11,7 @@ x = 5
 
 func sleepLogout() {
 
-    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: Offline for: " +x+ " hours." )
+    SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName + ") ::: Offline for: " +x+ " hours." )
     Sleep(x*60*60*1000)
     
     
@@ -27,4 +26,4 @@ Login()
 
 
 
-SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName+ "|" +Language+ ") ::: Online" )
+SendTelegram(TELEGRAM_CHAT_ID, UserName+ "  (" +UniverseName + ") ::: Online" )

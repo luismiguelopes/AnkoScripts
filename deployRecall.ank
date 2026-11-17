@@ -1,9 +1,8 @@
 // Settings
 telegramId = TELEGRAM_CHAT_ID
 
-UserName = GetUserInfos().PlayerName
+UserName = GetCachedPlayer().PlayerName
 UniverseName = GetUniverseName()
-Language = GetLanguage()
 
 sendFrom = ""
 sendTo = "" // Fleet target (adjust as needed)
@@ -41,7 +40,7 @@ Print("Target timestamp:", arrivalTimestamp)
 Print("Total fleetsave:", ShortDur(delta))
 Print("Cancel in:", ShortDur(waitBeforeCancel))
 
-SendTelegram(telegramId, UserName + " (" + UniverseName + "|" + Language + ") ::: 🚀 FleetSave started")
+SendTelegram(telegramId, UserName + " (" + UniverseName + ") ::: 🚀 FleetSave started")
 SendTelegram(telegramId, "Expected arrival tomorrow at " + targetHour + ":" + targetMinute)
 SendTelegram(telegramId, "Cancel in " + ShortDur(waitBeforeCancel))
 

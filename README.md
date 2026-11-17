@@ -55,6 +55,7 @@ AnkoScripts is a comprehensive automation toolkit for OGame players who want to 
 - **`repatriateNow.ank`** - Resource repatriation
 - **`setFarmerSession.ank`** - Farming session configuration
 - **`transferShips.ank`** - Ship transfer automation
+- **`homeworldToPlanets.ank`** - Sends a fixed number of Large Cargos from the homeworld to every planet
 
 ## ⚙️ Prerequisites
 
@@ -170,7 +171,7 @@ This project is provided as-is for educational purposes. Use responsibly and in 
 ## 🔗 Related Links
 
 - [OGame Official Website](https://ogame.org)
-- [Anko Scripting Documentation](https://github.com/anko/anko)
+- [Anko Scripting Documentation](https://github.com/mattn/anko)
 - [OGame Wiki](https://ogame.fandom.com)
 
 ---

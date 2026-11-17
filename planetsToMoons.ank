@@ -1,9 +1,8 @@
 //////////////////////////////////////
 // INITIAL SETTINGS
 
-UserName = GetUserInfos().PlayerName
+UserName = GetCachedPlayer().PlayerName
 UniverseName = GetUniverseName()
-Language = GetLanguage()
 
 telegramId = TELEGRAM_CHAT_ID
 //discordWebhook = DISCORD_WEBHOOK_URL  // <- Replace with your Discord Webhook
@@ -24,7 +23,7 @@ func SendAll(msg) {
 //////////////////////////////////////
 // START OF PROCESS
 
-intro = "🚀 Starting sending Planets ➡️ Moons by " + UserName + " (" + UniverseName + " | " + Language + ")"
+intro = "🚀 Starting sending Planets ➡️ Moons by " + UserName + " (" + UniverseName + ")"
 SendAll(intro)
 
 planets = GetCachedPlanets()
@@ -73,7 +72,7 @@ for planet in planets {
 //////////////////////////////////////
 // FINALIZATION
 
-conclusion = "🏁 Process completed by " + UserName + " (" + UniverseName + " | " + Language + ")"
+conclusion = "🏁 Process completed by " + UserName + " (" + UniverseName + ")"
 summary = "📦 Total fleets sent successfully: " + fsMade
 
 SendAll(conclusion)

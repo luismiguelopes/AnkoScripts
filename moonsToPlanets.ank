@@ -1,9 +1,8 @@
 //////////////////////////////////////
 // INITIAL SETTINGS
 
-UserName = GetUserInfos().PlayerName
+UserName = GetCachedPlayer().PlayerName
 UniverseName = GetUniverseName()
-Language = GetLanguage()
 
 telegramId = TELEGRAM_CHAT_ID
 
@@ -22,7 +21,7 @@ func SendAll(msg) {
 //////////////////////////////////////
 // START
 
-intro = "🚀 Starting fleet dispatch from Moons to Planets " + UserName + " (" + UniverseName + " | " + Language + ")"
+intro = "🚀 Starting fleet dispatch from Moons to Planets " + UserName + " (" + UniverseName + ")"
 SendAll(intro)
 
 moons = GetCachedMoons()
@@ -60,7 +59,7 @@ for moon in moons {
 //////////////////////////////////////
 // FINALIZATION
 
-conclusion = "🎯 End of process by " + UserName + " (" + UniverseName + " | " + Language + ")"
+conclusion = "🎯 End of process by " + UserName + " (" + UniverseName + ")"
 summary = "📦 Total fleets sent successfully: " + fsMade
 
 SendAll(conclusion)

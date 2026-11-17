@@ -1,6 +1,6 @@
 
 // Utility functions
-username = GetUserInfos().PlayerName
+username = GetCachedPlayer().PlayerName
 
 function Work(min, max) {
     onWork = Random(min, max)
