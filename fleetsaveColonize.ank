@@ -34,11 +34,11 @@ func FleetSaveFromMoon(moon) {
     // The Colonize mission needs at least one colony ship in the fleet
     ships, err = GetCachedCelestial(origin).GetShips()
     if err != nil {
-        Notify("error", origin + " could not read ships: " + err)
+        Notify("error", "" + origin + " could not read ships: " + err)
         return "failed"
     }
     if ships.ColonyShip == 0 {
-        Notify("warn", origin + " skipped: no colony ship on this moon")
+        Notify("warn", "" + origin + " skipped: no colony ship on this moon")
         return "skipped"
     }
 
@@ -52,10 +52,10 @@ func FleetSaveFromMoon(moon) {
     fleet.SetAllResources()
     fleet, err = fleet.SendNow()
     if err != nil {
-        Notify("error", origin + " fleetsave failed: " + err)
+        Notify("error", "" + origin + " fleetsave failed: " + err)
         return "failed"
     }
-    Notify("info", origin + " ➡️ " + destination + " ::: Colonize")
+    Notify("info", "" + origin + " ➡️ " + destination + " ::: Colonize")
     return "sent"
 }
 

@@ -17,7 +17,7 @@ Every script is standalone. Open it, adjust the `SETTINGS` block at the top and 
 
 - **`attackGuard.ank`** - Watches incoming attacks, fleetsaves the target shortly before impact and recalls the fleet afterwards
 - **`fleetsaveToMoons.ank`** - Parks all ships (and resources) from every planet/moon on random own moons 1-2 galaxies away (galaxies are circular) at 10%, with human-like timing
-  - `useRecall = true` cancels each fleet halfway so it flies home on its own and is back in the `returnFromHour`-`returnToHour` window
+  - `useRecall = true` cancels each fleet halfway so it flies home on its own; one return time is picked in the `returnFromHour`-`returnToHour` window and every fleet lands within `returnSpread` minutes of it
 - **`nightFleetsave.ank`** - Sends one fleetsave and recalls it halfway so the fleet is back the next morning; refuses to send if the flight is too short to recall in time
 - **`fleetsaveColonize.ank`** - Fleetsaves every moon with the Colonize mission (moons without a colony ship are skipped)
 
@@ -37,6 +37,7 @@ Every script is standalone. Open it, adjust the `SETTINGS` block at the top and 
 
 - **`buildLargeCargos.ank`** - Keeps a target number of Large Cargos on every planet
 - **`buildDef.ank`** - Keeps a target amount of each defense on every planet, scaled by a per-planet factor (0 = no defense)
+- **`fullProduction.ank`** - Sets the metal, crystal and deuterium mines to 100% on every planet (energy settings untouched), with random delays between planets
 - **`ipmAttack.ank`** - Builds and launches interplanetary missiles at a target a set number of times
 
 ### 🌾 Farming, expeditions and auctions

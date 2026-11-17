@@ -106,7 +106,7 @@ for shipType, target in targets {
             fleet, err = fleet.SendNow()
             if err != nil {
                 failed = failed + 1
-                Notify("error", celestials[from].Coordinate + " ➡️ " + celestials[to].Coordinate + " failed: " + err)
+                Notify("error", "" + celestials[from].Coordinate + " ➡️ " + celestials[to].Coordinate + " failed: " + err)
                 // Don't use this source again for this ship type
                 diff[from] = 0
                 continue

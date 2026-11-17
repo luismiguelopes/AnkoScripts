@@ -1,0 +1,75 @@
+// Sets the metal, crystal and deuterium mines to 100% on every planet.
+// Energy (solar plant, fusion reactor, satellites, crawlers) is left untouched.
+
+//////////////////////////////////////
+// SETTINGS
+
+minDelay = 4                    // seconds between planets (random between min and max)
+maxDelay = 12
+
+//////////////////////////////////////
+// COMMON (same block in every script)
+
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
+}
+
+//////////////////////////////////////
+// MAIN
+
+changed = 0
+alreadyFull = 0
+failed = 0
+
+for planet in GetCachedPlanets() {
+    coord = "" + planet.Coordinate
+
+    // "Opening the resource settings page"
+    Sleep(Random(minDelay * 1000, maxDelay * 1000))
+
+    settings, err = GetResourceSettings(planet.ID)
+    if err != nil {
+        failed = failed + 1
+        Notify("error", "Could not read resource settings on " + coord + ": " + err)
+        continue
+    }
+
+    if settings.MetalMine == 100 && settings.CrystalMine == 100 && settings.DeuteriumSynthesizer == 100 {
+        alreadyFull = alreadyFull + 1
+        Notify("info", coord + " already at 100%")
+        continue
+    }
+
+    before = "M " + settings.MetalMine + "% | C " + settings.CrystalMine + "% | D " + settings.DeuteriumSynthesizer + "%"
+    // The game applies the whole setting, so the energy cursors are copied as they are
+    newSettings = NewResourceSettings(100, 100, 100,
+        settings.SolarPlant, settings.FusionReactor, settings.SolarSatellite, settings.Crawler)
+
+    // Small pause before "clicking save"
+    Sleep(Random(1000, 3000))
+
+    err = SetResourceSettings(planet.ID, newSettings)
+    if err != nil {
+        failed = failed + 1
+        Notify("error", "Could not set 100% on " + coord + ": " + err)
+        continue
+    }
+    changed = changed + 1
+    Notify("info", coord + " " + before + " ➡️ 100%")
+}
+
+Notify("report", "⛏️ Mines at 100%: " + changed + " changed, " + alreadyFull + " already at 100%, " + failed + " failed")

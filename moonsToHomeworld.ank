@@ -34,7 +34,7 @@ func TransferShipsFromMoon(moon, scToKeep, lcToKeep) {
     origin = moon.Coordinate
     allShips, err = GetCachedCelestial(origin).GetShips()
     if err != nil {
-        Notify("error", origin + " could not read ships: " + err)
+        Notify("error", "" + origin + " could not read ships: " + err)
         return "failed"
     }
 
@@ -57,11 +57,11 @@ func TransferShipsFromMoon(moon, scToKeep, lcToKeep) {
     }
     fleet, err = fleet.SendNow()
     if err != nil {
-        Notify("error", origin + " ➡️ homeworld failed: " + err)
+        Notify("error", "" + origin + " ➡️ homeworld failed: " + err)
         Sleep(Random(1000, 3000))
         return "failed"
     }
-    Notify("info", origin + " ➡️ " + destination.Coordinate + " ::: LC " + largeToSend + " | SC " + smallToSend)
+    Notify("info", "" + origin + " ➡️ " + destination.Coordinate + " ::: LC " + largeToSend + " | SC " + smallToSend)
     Sleep(Random(1000, 5000))
     return "sent"
 }

@@ -65,11 +65,10 @@ func CollectFrom(planet) {
         Notify("error", "Could not read ships on " + origin + ": " + err)
         return 0
     }
-    roundedUp = total + lcCapacity - 1
-    needed = (roundedUp - roundedUp % lcCapacity) / lcCapacity
+    needed = Ceil(total / lcCapacity)
     lc = ships.LargeCargo
     if lc == 0 {
-        Notify("warn", origin + " has " + Dotify(total) + " resources but no Large Cargos")
+        Notify("warn", "" + origin + " has " + Dotify(total) + " resources but no Large Cargos")
         return 0
     }
     if lc > needed {
@@ -96,10 +95,10 @@ func CollectFrom(planet) {
     fleet.SetResources(NewResources(m, c, d))
     fleet, err = fleet.SendNow()
     if err != nil {
-        Notify("error", origin + " ➡️ " + targetCoord + " failed: " + err)
+        Notify("error", "" + origin + " ➡️ " + targetCoord + " failed: " + err)
         return 0
     }
-    Notify("info", origin + " ➡️ " + targetCoord + " ::: " + lc + " LC | M " + Dotify(m) + " | C " + Dotify(c) + " | D " + Dotify(d))
+    Notify("info", "" + origin + " ➡️ " + targetCoord + " ::: " + lc + " LC | M " + Dotify(m) + " | C " + Dotify(c) + " | D " + Dotify(d))
     return m + c + d
 }
 

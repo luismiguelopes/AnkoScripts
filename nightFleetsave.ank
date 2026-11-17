@@ -62,7 +62,7 @@ returnTimestamp = UnixFromDate(year, month, day + 1, returnSecondOfDay) - timezo
 delta = returnTimestamp - now
 
 // Outbound until cancel + same time back = delta, so cancel halfway
-waitBeforeCancel = delta / 2
+waitBeforeCancel = Floor(delta / 2)
 
 // The fleet must still be in the air when we cancel, or it lands at the target
 ships, err = origin.GetShips()
@@ -70,13 +70,13 @@ if err != nil {
     Notify("error", "nightFleetsave: could not read ships: " + err)
     return
 }
-oneWaySecs, _ = FlightTime(origin.GetCoordinate(), sendTo, fleetSpeed, ships)
+oneWaySecs, _ = FlightTime(origin.GetCoordinate(), sendTo, fleetSpeed, ships, PARK, 0)
 if oneWaySecs <= waitBeforeCancel + 300 {
     Notify("error", "nightFleetsave aborted: one-way flight is " + ShortDur(oneWaySecs) + " but the cancel happens after " + ShortDur(waitBeforeCancel) + ". Pick a farther target or a slower speed.")
     return
 }
 
-returnText = Pad2(returnSecondOfDay / 3600) + ":" + Pad2((returnSecondOfDay % 3600) / 60)
+returnText = Pad2(Floor(returnSecondOfDay / 3600)) + ":" + Pad2(Floor((returnSecondOfDay % 3600) / 60))
 Notify("info", "Total fleetsave: " + ShortDur(delta) + " | Cancel in: " + ShortDur(waitBeforeCancel) + " | One-way flight: " + ShortDur(oneWaySecs))
 
 fleet = NewFleet()

@@ -78,8 +78,8 @@ for {
 
     ships = NewShipsInfos()
     ships.Set(COLONYSHIP, 1)
-    secs, _ = FlightTime(origin.GetCoordinate(), destination, HUNDRED_PERCENT, *ships)
-    Notify("info", "ColonyShip sent to " + destination + ". Arrival in " + (secs / 60) + " min")
+    secs, _ = FlightTime(origin.GetCoordinate(), destination, HUNDRED_PERCENT, *ships, COLONIZE, 0)
+    Notify("info", "ColonyShip sent to " + destination + ". Arrival in " + Floor(secs / 60) + " min")
     Sleep((secs + 15) * 1000)
 
     // Only ever touch the planet at the destination coordinate

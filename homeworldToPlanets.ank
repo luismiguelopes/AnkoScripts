@@ -61,7 +61,7 @@ for planet in GetCachedPlanets() {
 
     if err != nil {
         failed = failed + 1
-        Notify("error", home.Coordinate + " ➡️ " + planet.Coordinate + " failed: " + err)
+        Notify("error", "" + home.Coordinate + " ➡️ " + planet.Coordinate + " failed: " + err)
         Sleep(Random(2000, 5000))
         continue
     }

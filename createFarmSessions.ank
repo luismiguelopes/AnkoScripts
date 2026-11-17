@@ -88,7 +88,7 @@ for g = 1; g <= 5; g++ {
             end = 499
         }
         // Calculate the center system of the interval
-        center = (start + end) / 2
+        center = Floor((start + end) / 2)
         // Choose the origin closest to the center (circular)
         minDist = 1000
         bestOrigin = galOrigins[0]
