@@ -55,6 +55,9 @@ AnkoScripts is a comprehensive automation toolkit for OGame players who want to 
 - **`setFarmerSession.ank`** - Farming session configuration
 - **`transferShips.ank`** - Ship transfer automation
 - **`homeworldToPlanets.ank`** - Sends a fixed number of Large Cargos from the homeworld to every planet
+- **`planetsToHomeworld.ank`** - Brings the Large Cargos from every planet back to the homeworld with all the resources they can carry
+- **`dailyReport.ank`** - Daily Telegram report: points/rank change, resources per planet, fleet totals, slots
+- **`attackGuard.ank`** - Watches incoming attacks, fleetsaves the target shortly before impact and recalls afterwards
 
 ## ⚙️ Prerequisites
 

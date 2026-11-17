@@ -1,0 +1,202 @@
+//////////////////////////////////////
+// SETTINGS
+
+reactMinSeconds = 240           // fleetsave between this many seconds...
+reactMaxSeconds = 480           // ...and this many before impact (random each time)
+fleetSpeed = TEN_PERCENT        // slow = longer flight, so the recall comes back sooner after impact
+safeTarget = nil                // e.g. "M:2:100:10"; nil = nearest own planet/moon in another system
+recallDelayMin = 30             // recall between these seconds after the impact
+recallDelayMax = 120
+idlePollMin = 180               // seconds between checks when nothing is incoming
+idlePollMax = 300
+
+//////////////////////////////////////
+// COMMON (same block in every script)
+
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
+}
+
+//////////////////////////////////////
+// MAIN
+
+handled = {}        // "ID" / "ID_seen" -> true (already fleetsaved / reported)
+reactAtFor = {}     // "ID" -> seconds before impact to react (picked once per attack)
+pendingRecalls = [] // [fleetID, recallAtTimestamp, fromCoord, toCoord]
+
+func SameSpot(a, b) {
+    return a.Galaxy == b.Galaxy && a.System == b.System && a.Position == b.Position && a.Type == b.Type
+}
+
+// Nearest own planet/moon in another system (falls back to any other celestial)
+func PickSafeTarget(fromCoord) {
+    if safeTarget != nil {
+        return GetCachedCelestial(safeTarget).GetCoordinate()
+    }
+    best = nil
+    bestDist = 1000000
+    fallback = nil
+    for list in [GetCachedPlanets(), GetCachedMoons()] {
+        for c in list {
+            cc = c.Coordinate
+            if SameSpot(cc, fromCoord) {
+                continue
+            }
+            if fallback == nil {
+                fallback = cc
+            }
+            if cc.Galaxy != fromCoord.Galaxy || cc.System == fromCoord.System {
+                continue
+            }
+            dist = cc.System - fromCoord.System
+            if dist < 0 {
+                dist = -dist
+            }
+            if dist < bestDist {
+                bestDist = dist
+                best = cc
+            }
+        }
+    }
+    if best != nil {
+        return best
+    }
+    return fallback
+}
+
+// Sends everything away from the attacked celestial and schedules the recall
+func FleetSave(ev) {
+    from = ev.Destination
+    recallAt = GetTimestamp() + ev.ArriveIn + Random(recallDelayMin, recallDelayMax)
+
+    // Same celestial already saved (e.g. a grouped attack wave): just push the recall back
+    for r in pendingRecalls {
+        if SameSpot(r[2], from) {
+            if recallAt > r[1] {
+                r[1] = recallAt
+            }
+            Notify("info", "🛡️ " + from + " already fleetsaved, recall moved to cover this attack too")
+            return
+        }
+    }
+
+    to = PickSafeTarget(from)
+    if to == nil {
+        Notify("error", "🛡️ No safe target for " + from + ", fleet stays!")
+        return
+    }
+
+    fleet = NewFleet()
+    fleet.SetOrigin(from)
+    fleet.SetDestination(to)
+    fleet.SetSpeed(fleetSpeed)
+    fleet.SetMission(PARK)
+    fleet.SetAllShips()
+    fleet.SetAllResources()
+    fleet, err = fleet.SendNow()
+    if err != nil {
+        Notify("error", "🛡️ Fleetsave from " + from + " FAILED: " + err + ". Act manually!")
+        return
+    }
+
+    pendingRecalls += [[fleet.ID, recallAt, from, to]]
+    Notify("report", "🛡️ Fleetsave " + from + " ➡️ " + to + ". Recall in " + ShortDur(recallAt - GetTimestamp()))
+}
+
+// Recalls fleets whose attack already hit
+func ProcessRecalls() {
+    now = GetTimestamp()
+    remaining = []
+    for r in pendingRecalls {
+        if r[1] > now {
+            remaining += [r]
+            continue
+        }
+        err = CancelFleet(r[0])
+        if err != nil {
+            Notify("warn", "🛡️ Could not recall fleet " + r[2] + " ➡️ " + r[3] + " (already landed?): " + err)
+        } else {
+            Notify("report", "🛡️ Attack passed, fleet recalled back to " + r[2])
+        }
+    }
+    pendingRecalls = remaining
+}
+
+// Seconds to sleep before the next check
+func CheckAttacks() {
+    attacks, err = GetAttacks()
+    if err != nil {
+        Notify("error", "attackGuard: could not read attacks: " + err)
+        return Random(30, 60)
+    }
+
+    nextCheck = Random(idlePollMin, idlePollMax)
+    for ev in attacks {
+        key = "" + ev.ID
+        isAttack = ev.MissionType == ATTACK || ev.MissionType == GROUPEDATTACK
+        if !isAttack {
+            if handled[key] != true {
+                handled[key] = true
+                Notify("warn", "👀 Hostile mission " + ev.MissionType + " from " + ev.AttackerName + " on " + ev.Destination + " in " + ShortDur(ev.ArriveIn))
+            }
+            continue
+        }
+        if handled[key] == true {
+            continue
+        }
+
+        if reactAtFor[key] == nil {
+            reactAtFor[key] = Random(reactMinSeconds, reactMaxSeconds)
+        }
+        reactAt = reactAtFor[key]
+        if ev.ArriveIn <= reactAt {
+            handled[key] = true
+            Notify("warn", "⚔️ " + ev.AttackerName + " hits " + ev.Destination + " in " + ShortDur(ev.ArriveIn) + ", fleetsaving")
+            FleetSave(ev)
+        } else {
+            // Wake up in time for this attack
+            untilReact = ev.ArriveIn - reactAt
+            if untilReact < nextCheck {
+                nextCheck = untilReact
+            }
+            if handled[key + "_seen"] != true {
+                handled[key + "_seen"] = true
+                Notify("warn", "⚔️ Incoming attack from " + ev.AttackerName + " on " + ev.Destination + " in " + ShortDur(ev.ArriveIn))
+            }
+        }
+    }
+
+    // Wake up in time for the next recall too
+    now = GetTimestamp()
+    for r in pendingRecalls {
+        if r[1] - now < nextCheck {
+            nextCheck = r[1] - now
+        }
+    }
+    if nextCheck < 10 {
+        nextCheck = 10
+    }
+    return nextCheck
+}
+
+Notify("report", "🛡️ attackGuard started")
+for {
+    ProcessRecalls()
+    sleepSecs = CheckAttacks()
+    Notify("info", "attackGuard: next check in " + ShortDur(sleepSecs))
+    Sleep(sleepSecs * 1000)
+}
