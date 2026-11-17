@@ -1,0 +1,125 @@
+//////////////////////////////////////
+// SETTINGS
+
+galaxies = [1, 2, 3, 4, 5]      // galaxies to scan
+minPathfinders = 70             // only harvest fields that need at least this many pathfinders
+fleetSpeed = HUNDRED_PERCENT
+repeatEveryHours = 0            // 0 = scan once; otherwise scan again every N hours (+ up to 30 min)
+
+//////////////////////////////////////
+// COMMON (same block in every script)
+
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
+}
+
+//////////////////////////////////////
+// MAIN
+
+// Own planets/moons in a galaxy with their pathfinder count: [[coord, pathfinders], ...]
+func PathfinderOrigins(galaxy) {
+    origins = []
+    for list in [GetCachedPlanets(), GetCachedMoons()] {
+        for c in list {
+            if c.Coordinate.Galaxy != galaxy {
+                continue
+            }
+            ships, err = GetCachedCelestial(c.Coordinate).GetShips()
+            if err == nil && ships.Pathfinder > 0 {
+                origins += [[c.Coordinate, ships.Pathfinder]]
+            }
+        }
+    }
+    return origins
+}
+
+// Index of the nearest origin (by system) that still has pathfinders, or -1
+func NearestOrigin(origins, system) {
+    best = -1
+    bestDist = 1000
+    for i = 0; i < len(origins); i++ {
+        if origins[i][1] <= 0 {
+            continue
+        }
+        dist = origins[i][0].System - system
+        if dist < 0 { dist = -dist }
+        if dist < bestDist {
+            bestDist = dist
+            best = i
+        }
+    }
+    return best
+}
+
+func Harvest() {
+    sent = 0
+    failed = 0
+    for galaxy in galaxies {
+        origins = PathfinderOrigins(galaxy)
+        if len(origins) == 0 {
+            Notify("info", "No pathfinders in G" + galaxy + ", skipping")
+            continue
+        }
+        for system = 1; system <= 499; system++ {
+            systemInfos, err = GalaxyInfos(galaxy, system)
+            Sleep(Random(500, 2000))
+            if err != nil {
+                LogError(err)
+                continue
+            }
+            debris = systemInfos.ExpeditionDebris
+            if debris.PathfindersNeeded < minPathfinders {
+                continue
+            }
+            i = NearestOrigin(origins, system)
+            if i < 0 {
+                Notify("info", "G" + galaxy + ": out of pathfinders")
+                break
+            }
+            pf = debris.PathfindersNeeded
+            if pf > origins[i][1] {
+                pf = origins[i][1]
+            }
+
+            fleet = NewFleet()
+            fleet.SetOrigin(origins[i][0])
+            fleet.SetDestination(NewCoordinate(galaxy, system, 16, DEBRIS_TYPE))
+            fleet.SetSpeed(fleetSpeed)
+            fleet.SetMission(RECYCLEDEBRISFIELD)
+            fleet.AddShips(PATHFINDER, pf)
+            fleet, err = fleet.SendNow()
+            if err != nil {
+                failed = failed + 1
+                Notify("warn", "Harvest " + galaxy + ":" + system + ":16 failed: " + err)
+                continue
+            }
+            origins[i][1] = origins[i][1] - pf
+            sent = sent + 1
+            Notify("info", "" + pf + " PF " + origins[i][0] + " ➡️ " + galaxy + ":" + system + ":16 (M " + Dotify(debris.Metal) + " | C " + Dotify(debris.Crystal) + ")")
+            Sleep(Random(3000, 10000))
+        }
+    }
+    Notify("report", "♻️ Debris harvest done. Fleets sent: " + sent + " | Failed: " + failed)
+}
+
+for {
+    Harvest()
+    if repeatEveryHours <= 0 {
+        break
+    }
+    Sleep((repeatEveryHours * 3600 + Random(0, 1800)) * 1000)
+}

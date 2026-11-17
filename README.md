@@ -58,6 +58,10 @@ AnkoScripts is a comprehensive automation toolkit for OGame players who want to 
 - **`planetsToHomeworld.ank`** - Brings the Large Cargos from every planet back to the homeworld with all the resources they can carry
 - **`dailyReport.ank`** - Daily Telegram report: points/rank change, resources per planet, fleet totals, slots
 - **`attackGuard.ank`** - Watches incoming attacks, fleetsaves the target shortly before impact and recalls afterwards
+- **`resourceCollector.ank`** - Periodically brings resources from planets above a threshold to the homeworld
+- **`debrisHarvester.ank`** - Scans galaxies for expedition debris and sends pathfinders from the nearest planet/moon
+- **`expeditionManager.ank`** - Keeps expedition slots busy, rotating origins and leaving fleet slots free
+- **`fleetBalancer.ank`** - Moves surplus ships so every planet reaches a target amount per ship type
 
 ## ⚙️ Prerequisites
 

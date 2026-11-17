@@ -1,0 +1,108 @@
+//////////////////////////////////////
+// SETTINGS
+
+// Planets/moons to send expeditions from (used in turn)
+expeditionOrigins = [GetHomeWorld()]
+
+// Fleet of each expedition
+expeditionShips = {
+    LARGECARGO: 2000,
+    PATHFINDER: 1,
+    ESPIONAGEPROBE: 1
+}
+systemSpread = 2                // destination system = origin system +/- this
+expeditionHours = 1             // holding time
+fleetSpeed = HUNDRED_PERCENT
+reserveSlots = 2                // normal fleet slots always left free for other scripts
+checkMinMinutes = 10            // minutes between slot checks
+checkMaxMinutes = 20
+reportEveryHours = 24           // Telegram summary interval
+
+//////////////////////////////////////
+// COMMON (same block in every script)
+
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
+}
+
+//////////////////////////////////////
+// MAIN
+
+originIndex = 0
+sentSinceReport = 0
+failedSinceReport = 0
+lastReport = GetTimestamp()
+
+// Returns true when the expedition was sent
+func SendExpedition() {
+    origin = GetCachedCelestial(expeditionOrigins[originIndex % len(expeditionOrigins)])
+    originIndex = originIndex + 1
+    if origin == nil {
+        Notify("error", "expeditionManager: an origin in the settings is not one of your planets/moons")
+        return false
+    }
+    oc = origin.GetCoordinate()
+    system = oc.System + Random(-systemSpread, systemSpread)
+    if system < 1 { system = 1 }
+    if system > 499 { system = 499 }
+
+    fleet = NewFleet()
+    fleet.SetOrigin(oc)
+    fleet.SetDestination(NewCoordinate(oc.Galaxy, system, 16, PLANET_TYPE))
+    fleet.SetSpeed(fleetSpeed)
+    fleet.SetMission(EXPEDITION)
+    fleet.SetDuration(expeditionHours)
+    for shipType, amount in expeditionShips {
+        fleet.AddShips(shipType, amount)
+    }
+    fleet, err = fleet.SendNow()
+    if err != nil {
+        Notify("warn", "Expedition from " + oc + " failed: " + err)
+        return false
+    }
+    Notify("info", "Expedition " + oc + " ➡️ " + oc.Galaxy + ":" + system + ":16")
+    return true
+}
+
+Notify("report", "🌌 expeditionManager started")
+
+for {
+    slots = GetSlots()
+    freeExp = slots.ExpTotal - slots.ExpInUse
+    freeFleet = slots.Total - slots.InUse - reserveSlots
+
+    // One failure per round is enough: missing ships won't fix themselves
+    for freeExp > 0 && freeFleet > 0 {
+        if SendExpedition() {
+            sentSinceReport = sentSinceReport + 1
+            freeExp = freeExp - 1
+            freeFleet = freeFleet - 1
+            Sleep(Random(5000, 15000))
+        } else {
+            failedSinceReport = failedSinceReport + 1
+            break
+        }
+    }
+
+    if GetTimestamp() - lastReport >= reportEveryHours * 3600 {
+        Notify("report", "🌌 Expeditions in the last " + reportEveryHours + "h: sent " + sentSinceReport + " | failed " + failedSinceReport)
+        sentSinceReport = 0
+        failedSinceReport = 0
+        lastReport = GetTimestamp()
+    }
+    Sleep(Random(checkMinMinutes, checkMaxMinutes) * 60 * 1000)
+}

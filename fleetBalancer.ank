@@ -1,0 +1,133 @@
+//////////////////////////////////////
+// SETTINGS
+
+// How many of each ship type every planet should have.
+// Planets with more give the surplus to planets with less.
+targets = {
+    LARGECARGO: 500,
+    SMALLCARGO: 0
+}
+includeMoons = false
+fleetSpeed = HUNDRED_PERCENT
+minDelay = 8000                 // ms between sends
+maxDelay = 20000
+
+//////////////////////////////////////
+// COMMON (same block in every script)
+
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
+}
+
+// Amount of a ship type in a ShipsInfos
+func ShipCount(allShips, shipType) {
+    if shipType == LIGHTFIGHTER { return allShips.LightFighter }
+    if shipType == HEAVYFIGHTER { return allShips.HeavyFighter }
+    if shipType == CRUISER { return allShips.Cruiser }
+    if shipType == BATTLESHIP { return allShips.Battleship }
+    if shipType == SMALLCARGO { return allShips.SmallCargo }
+    if shipType == LARGECARGO { return allShips.LargeCargo }
+    if shipType == COLONYSHIP { return allShips.ColonyShip }
+    if shipType == BATTLECRUISER { return allShips.Battlecruiser }
+    if shipType == BOMBER { return allShips.Bomber }
+    if shipType == DESTROYER { return allShips.Destroyer }
+    if shipType == DEATHSTAR { return allShips.Deathstar }
+    if shipType == RECYCLER { return allShips.Recycler }
+    if shipType == ESPIONAGEPROBE { return allShips.EspionageProbe }
+    if shipType == REAPER { return allShips.Reaper }
+    if shipType == PATHFINDER { return allShips.Pathfinder }
+    return 0
+}
+//////////////////////////////////////
+// MAIN
+
+celestials = []
+for p in GetCachedPlanets() {
+    celestials += p
+}
+if includeMoons {
+    for m in GetCachedMoons() {
+        celestials += m
+    }
+}
+
+// Snapshot of the ships on every celestial
+shipsOn = []
+for c in celestials {
+    ships, err = GetCachedCelestial(c.Coordinate).GetShips()
+    if err != nil {
+        Notify("error", "Could not read ships on " + c.Coordinate + ": " + err)
+        return
+    }
+    shipsOn += ships
+}
+
+Notify("report", "⚖️ fleetBalancer started on " + len(celestials) + " planets/moons")
+
+sent = 0
+failed = 0
+for shipType, target in targets {
+    // Positive = surplus, negative = missing
+    diff = []
+    for i = 0; i < len(celestials); i++ {
+        diff += ShipCount(shipsOn[i], shipType) - target
+    }
+
+    for to = 0; to < len(celestials); to++ {
+        for from = 0; from < len(celestials) && diff[to] < 0; from++ {
+            if diff[from] <= 0 {
+                continue
+            }
+            amount = -diff[to]
+            if amount > diff[from] {
+                amount = diff[from]
+            }
+
+            fleet = NewFleet()
+            fleet.SetOrigin(celestials[from].Coordinate)
+            fleet.SetDestination(celestials[to].Coordinate)
+            fleet.SetSpeed(fleetSpeed)
+            fleet.SetMission(PARK)
+            fleet.AddShips(shipType, amount)
+            fleet, err = fleet.SendNow()
+            if err != nil {
+                failed = failed + 1
+                Notify("error", celestials[from].Coordinate + " ➡️ " + celestials[to].Coordinate + " failed: " + err)
+                // Don't use this source again for this ship type
+                diff[from] = 0
+                continue
+            }
+            diff[from] = diff[from] - amount
+            diff[to] = diff[to] + amount
+            sent = sent + 1
+            Notify("info", "" + amount + " x " + shipType + " " + celestials[from].Coordinate + " ➡️ " + celestials[to].Coordinate)
+            Sleep(Random(minDelay, maxDelay))
+        }
+    }
+
+    stillMissing = 0
+    for d in diff {
+        if d < 0 {
+            stillMissing = stillMissing - d
+        }
+    }
+    if stillMissing > 0 {
+        Notify("warn", "Not enough " + shipType + " to reach the target everywhere: " + stillMissing + " missing")
+    }
+}
+
+Notify("report", "⚖️ fleetBalancer done. Fleets sent: " + sent + " | Failed: " + failed)
