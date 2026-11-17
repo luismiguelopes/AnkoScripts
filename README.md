@@ -1,143 +1,103 @@
 # AnkoScripts
 
-A collection of automation scripts for the browser game OGame, written in Anko scripting language. These scripts help automate various game activities such as colonization, farming, ship building, and resource management.
+A collection of automation scripts for the browser game OGame, written in the [Anko](https://github.com/mattn/anko) scripting language and run inside the Ninja Bot. They automate colonization, farming schedules, ship and defense building, fleet movements, fleetsaves, expeditions, debris harvesting and reporting.
 
-## 📋 Table of Contents
+## 📜 Scripts
 
-- [Overview](#overview)
-- [Scripts Description](#scripts-description)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Configuration](#configuration)
-- [Features](#features)
-- [Disclaimer](#disclaimer)
-- [Contributing](#contributing)
+Every script is standalone. Open it, adjust the `SETTINGS` block at the top and run it in the bot.
 
-## 🎮 Overview
+### 🪐 Colonization
 
-AnkoScripts is a comprehensive automation toolkit for OGame players who want to optimize their gameplay experience. The scripts are designed to handle repetitive tasks, allowing players to focus on strategic decisions rather than manual operations.
+- **`autoColonization.ank`** - Sends colony ships to random spots in a range and keeps the first colony with enough fields
+  - Abandons the new colony if it has fewer than `minFields` (290 by default)
+  - Only ever touches the planet at the colony ship's destination, never an older colony
+  - Stops after `maxFailedSends` failed sends in a row
 
-## 📜 Scripts Description
+### 🛡️ Fleetsave and protection
 
-### Core Automation Scripts
+- **`attackGuard.ank`** - Watches incoming attacks, fleetsaves the target shortly before impact and recalls the fleet afterwards
+- **`fleetsaveToMoons.ank`** - Parks all ships (and resources) from every planet/moon on random own moons 1-2 galaxies away (galaxies are circular) at 10%, with human-like timing
+  - `useRecall = true` cancels each fleet halfway so it flies home on its own and is back in the `returnFromHour`-`returnToHour` window
+- **`nightFleetsave.ank`** - Sends one fleetsave and recalls it halfway so the fleet is back the next morning; refuses to send if the flight is too short to recall in time
+- **`fleetsaveColonize.ank`** - Fleetsaves every moon with the Colonize mission (moons without a colony ship are skipped)
 
-- **`autoColonization.ank`** - Automated planet colonization system
-  - Automatically sends colony ships to random locations
-  - Abandons colonies with less than 290 fields
-  - Includes safety delays and Telegram notifications
+### 🚚 Fleet and resource transfers
 
-- **`farmSchedule.ank`** - Pauses and resumes the bot's farming on a human-like daily schedule
-  - Simulates human-like work schedules
-  - Includes work cycles, breaks, and lunch periods
-  - Automatically pauses/resumes farming activities
-  - Sends Telegram notifications for status updates
-
-- **`buildLargeCargos.ank`** - Keeps a target number of Large Cargos on every planet
-  - Maintains a desired number of ships across all planets
-  - Automatically builds ships when below threshold
-  - Configurable ship types and quantities
-  - Continuous monitoring with configurable intervals
-
-### Utility Scripts
-
-- **`bidAuction.ank`** - Automated auction bidding
-- **`buildDef.ank`** - Automated defense building
-- **`nightFleetsave.ank`** - Night fleetsave that is recalled halfway so the fleet is back in the morning
-- **`scanExpeditionDebris.ank`** - Scans a galaxy and reports large expedition debris fields
-- **`fleetsaveColonize.ank`** - Fleetsaves every moon using the Colonize mission
-- **`jumpGate.ank`** - Jump gate automation
-- **`loginLogout.ank`** - Session management
-- **`ipmAttack.ank`** - Builds and launches interplanetary missiles at a target repeatedly
-- **`moonsToPlanetsLC.ank`** - Sends the Large Cargos from every moon down to its planet
-- **`planetsToMoons.ank`** - Planet to moon transfers
-- **`repatriateNow.ank`** - Resource repatriation
-- **`createFarmSessions.ank`** - Creates farm sessions covering every galaxy
-- **`moonsToHomeworld.ank`** - Parks the extra cargos from every moon on the homeworld
 - **`homeworldToPlanets.ank`** - Sends a fixed number of Large Cargos from the homeworld to every planet
 - **`planetsToHomeworld.ank`** - Brings the Large Cargos from every planet back to the homeworld with all the resources they can carry
-- **`dailyReport.ank`** - Daily Telegram report: points/rank change, resources per planet, fleet totals, slots
-- **`attackGuard.ank`** - Watches incoming attacks, fleetsaves the target shortly before impact and recalls afterwards
-- **`resourceCollector.ank`** - Periodically brings resources from planets above a threshold to the homeworld
-- **`debrisHarvester.ank`** - Scans galaxies for expedition debris and sends pathfinders from the nearest planet/moon
-- **`expeditionManager.ank`** - Keeps expedition slots busy, rotating origins and leaving fleet slots free
+- **`moonsToHomeworld.ank`** - Parks the extra Large/Small Cargos from every moon on the homeworld, keeping a set amount on each moon
+- **`moonsToPlanetsLC.ank`** - Sends the Large Cargos from every moon down to its planet
+- **`planetsToMoons.ank`** - Sends all ships and resources from every planet up to its moon (planets without a moon are skipped)
+- **`repatriateNow.ank`** - Runs `moonsToPlanetsLC` and `planetsToMoons` in order, waits for the fleets to land, then calls the bot's repatriate
+- **`resourceCollector.ank`** - Periodically transports resources from planets above a threshold to the homeworld
 - **`fleetBalancer.ank`** - Moves surplus ships so every planet reaches a target amount per ship type
-- **`fleetsaveToMoons.ank`** - Fleetsaves all ships (and resources) from every planet/moon to random own moons 1-2 galaxies away at 10%, with human-like timing
+- **`jumpGate.ank`** - Moves ships between moons through jump gates in pairs, leftovers to the home moon, every 30-45 min
+
+### 🏗️ Building
+
+- **`buildLargeCargos.ank`** - Keeps a target number of Large Cargos on every planet
+- **`buildDef.ank`** - Keeps a target amount of each defense on every planet, scaled by a per-planet factor (0 = no defense)
+- **`ipmAttack.ank`** - Builds and launches interplanetary missiles at a target a set number of times
+
+### 🌾 Farming, expeditions and auctions
+
+- **`farmSchedule.ank`** - Pauses and resumes the bot's farming on a human-like daily schedule (work cycles, breaks, lunch, night)
+- **`createFarmSessions.ank`** - Creates farm sessions covering every galaxy from the nearest origin (each run creates new sessions)
+- **`expeditionManager.ank`** - Keeps expedition slots busy, rotating origins and always leaving some fleet slots free
+- **`debrisHarvester.ank`** - Scans galaxies for expedition debris and sends pathfinders from the nearest planet/moon
+- **`scanExpeditionDebris.ank`** - Scans one galaxy and reports large expedition debris fields (no fleets sent)
+- **`bidAuction.ank`** - Bids on the auctioneer up to a maximum, never against your own alliance
+
+### 📊 Reporting and session
+
+- **`dailyReport.ank`** - Daily Telegram report: points/rank change, resources per planet, fleet totals, slots
+- **`loginLogout.ank`** - Logs out for a random 4-6 hours and logs back in
+
+### 🧩 Template
+
+- **`_template.ank`** - Starting point for new scripts with the SETTINGS / COMMON / MAIN layout
 
 ## ⚙️ Prerequisites
 
 - OGame account
-- Anko browser extension or compatible script runner
-- Telegram bot (for notifications - optional)
-- Basic understanding of OGame mechanics
-
-## 🚀 Installation
-
-1. Clone or download this repository
-2. Install the Ninja Bot
-
+- Ninja Bot with scripting enabled
+- Telegram configured in the bot (optional, for notifications)
 
 ## 📖 Usage
 
-### Basic Setup
+1. Clone or download this repository
+2. Load the `.ank` file in the bot's script section
+3. Adjust the `SETTINGS` block at the top of the script
+4. Run it
 
-1. **Configure Telegram Notifications** (Optional)
-   ```javascript
-   // Add your Telegram chat ID to scripts that use notifications
-   TELEGRAM_CHAT_ID = "your_chat_id_here"
-   ```
+Settings you must fill in before the first run:
 
-2. **Run Individual Scripts**
-   - Load the desired `.ank` file in your script runner
-   - Configure any required parameters
-   - Execute the script
+- `nightFleetsave.ank`: `sendTo` (the script refuses to run without it)
+- `timezoneOffsetHours` (server time minus UTC) in `nightFleetsave`, `farmSchedule`, `dailyReport` and `fleetsaveToMoons`
+- `resourceCollector.ank`: `lcCapacity` for your Hyperspace Technology level
+- `buildDef.ank`: one entry in `factors` per planet, in the in-game order
+- Coordinates and origins in `ipmAttack`, `createFarmSessions` and `expeditionManager`
 
-### Example Configuration
+## 🧱 Script structure and logging
 
-For `autoColonization.ank`:
-```javascript
-// Configure colonization parameters
-destinationGalaxy = 3
-minSystem = 240
-maxSystem = 260
-minPosition = 7
-maxPosition = 9
-```
+Every script has the same layout:
 
-For `buildLargeCargos.ank`:
-```javascript
-// Configure ship building parameters
-shipsDesired = 500
-checkInterval = 10  // minutes
-```
+1. **SETTINGS** - everything you are expected to change
+2. **COMMON** - identical in every script: `UserName`, `UniverseName` and `Notify(level, msg)`
+3. **MAIN** - the script logic
 
-## ⚙️ Configuration
+`Notify` levels:
 
-### Global Variables
+| Level | Bot log | Telegram |
+|---|---|---|
+| `info` | ✅ | - |
+| `report` | ✅ | ✅ |
+| `warn` | ✅ | ✅ |
+| `error` | ✅ | ✅ |
 
-Most scripts use these common variables:
-- `UserName` - Player name from game
-- `UniverseName` - Current universe name
-- `Language` - Game language setting
-- `TELEGRAM_CHAT_ID` - Telegram notification target
+Per-item events (each fleet sent, each jump) are `info`, so Telegram only gets start/end summaries, warnings and errors.
 
-### Safety Features
-
-- **Delays**: Scripts include built-in delays to avoid detection
-- **Randomization**: Random intervals and values to simulate human behavior
-- **Error Handling**: Graceful error handling with retry mechanisms
-- **Notifications**: Telegram integration for status updates
-
-## ✨ Features
-
-- **Automated Colonization**: Smart planet colonization with field validation
-- **Farming Automation**: Human-like farming patterns with work schedules
-- **Ship Management**: Automated ship building and maintenance
-- **Resource Management**: Automated resource transfers and collection
-- **Fleet Operations**: Automated fleet movements and protection
-- **Real-time Notifications**: Telegram integration for status updates
-- **Safety Mechanisms**: Built-in delays and error handling
-- **Configurable Parameters**: Easy customization for different play styles
+Human-like behavior is built in: random delays between actions, occasional longer pauses, random order and random times. Keep it when editing.
 
 ## ⚠️ Disclaimer
 
@@ -165,11 +125,10 @@ Contributions are welcome! Please feel free to:
 
 ### Guidelines for Contributions
 
-- Add clear comments and documentation
-- Include error handling
-- Test scripts thoroughly before submitting
-- Follow the existing code style
-- Add appropriate safety mechanisms
+- Start new scripts from `_template.ank` (SETTINGS, COMMON and MAIN blocks)
+- Log with `Notify(level, msg)` instead of raw `SendTelegram`/`Print`
+- Handle errors (`if err != nil`) and keep human-like random delays
+- Test scripts in the bot before submitting
 
 ## 📝 License
 
