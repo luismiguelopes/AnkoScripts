@@ -32,7 +32,7 @@ func Notify(level, msg) {
 // MAIN
 
 if planet == nil {
-    Notify("error", "missiles: the planet in the settings is not one of yours")
+    Notify("error", "ipmAttack: the planet in the settings is not one of yours")
     return
 }
 
@@ -40,14 +40,14 @@ sent = 0
 for i = 1; i <= attacks; i++ {
     err = BuildDefense(planet.ID, INTERPLANETARYMISSILES, nbr)
     if err != nil {
-        Notify("error", "missiles: build failed on attack " + i + ": " + err)
+        Notify("error", "ipmAttack: build failed on attack " + i + ": " + err)
         break
     }
     Sleep(((constructionTime + 1) * nbr) * 1000)    // Wait for missiles to be built
 
     duration, err = SendIPM(planet.ID, target, nbr, 0)
     if err != nil {
-        Notify("error", "missiles: send failed on attack " + i + ": " + err)
+        Notify("error", "ipmAttack: send failed on attack " + i + ": " + err)
         break
     }
     sent = sent + 1

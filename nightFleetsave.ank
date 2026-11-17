@@ -45,12 +45,12 @@ func UnixFromDate(y, m, d, secondsInDay) {
 }
 
 if sendTo.Galaxy == 0 {
-    Notify("error", "deployRecall: set sendTo in the settings first")
+    Notify("error", "nightFleetsave: set sendTo in the settings first")
     return
 }
 origin = GetCachedCelestial(sendFrom)
 if origin == nil {
-    Notify("error", "deployRecall: " + sendFrom + " is not one of your planets/moons")
+    Notify("error", "nightFleetsave: " + sendFrom + " is not one of your planets/moons")
     return
 }
 
@@ -67,12 +67,12 @@ waitBeforeCancel = delta / 2
 // The fleet must still be in the air when we cancel, or it lands at the target
 ships, err = origin.GetShips()
 if err != nil {
-    Notify("error", "deployRecall: could not read ships: " + err)
+    Notify("error", "nightFleetsave: could not read ships: " + err)
     return
 }
 oneWaySecs, _ = FlightTime(origin.GetCoordinate(), sendTo, fleetSpeed, ships)
 if oneWaySecs <= waitBeforeCancel + 300 {
-    Notify("error", "deployRecall aborted: one-way flight is " + ShortDur(oneWaySecs) + " but the cancel happens after " + ShortDur(waitBeforeCancel) + ". Pick a farther target or a slower speed.")
+    Notify("error", "nightFleetsave aborted: one-way flight is " + ShortDur(oneWaySecs) + " but the cancel happens after " + ShortDur(waitBeforeCancel) + ". Pick a farther target or a slower speed.")
     return
 }
 

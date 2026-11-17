@@ -28,7 +28,7 @@ func Notify(level, msg) {
 //////////////////////////////////////
 // MAIN
 
-Notify("report", "buildShips started: " + shipsDesired + " LC per planet, every " + checkInterval + " min")
+Notify("report", "buildLargeCargos started: " + shipsDesired + " LC per planet, every " + checkInterval + " min")
 
 for {
     // Read planets every cycle so new colonies are included

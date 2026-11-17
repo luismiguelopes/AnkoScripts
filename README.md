@@ -27,13 +27,13 @@ AnkoScripts is a comprehensive automation toolkit for OGame players who want to 
   - Abandons colonies with less than 290 fields
   - Includes safety delays and Telegram notifications
 
-- **`farmBot.ank`** - Farming automation with realistic work patterns
+- **`farmSchedule.ank`** - Pauses and resumes the bot's farming on a human-like daily schedule
   - Simulates human-like work schedules
   - Includes work cycles, breaks, and lunch periods
   - Automatically pauses/resumes farming activities
   - Sends Telegram notifications for status updates
 
-- **`buildShips.ank`** - Automated ship production
+- **`buildLargeCargos.ank`** - Keeps a target number of Large Cargos on every planet
   - Maintains a desired number of ships across all planets
   - Automatically builds ships when below threshold
   - Configurable ship types and quantities
@@ -43,17 +43,17 @@ AnkoScripts is a comprehensive automation toolkit for OGame players who want to 
 
 - **`bidAuction.ank`** - Automated auction bidding
 - **`buildDef.ank`** - Automated defense building
-- **`deployRecall.ank`** - Fleet deployment and recall automation
-- **`expeditionDebris.ank`** - Expedition debris collection
-- **`fleetSaveOnColonize.ank`** - Fleet protection during colonization
+- **`nightFleetsave.ank`** - Night fleetsave that is recalled halfway so the fleet is back in the morning
+- **`scanExpeditionDebris.ank`** - Scans a galaxy and reports large expedition debris fields
+- **`fleetsaveColonize.ank`** - Fleetsaves every moon using the Colonize mission
 - **`jumpGate.ank`** - Jump gate automation
 - **`loginLogout.ank`** - Session management
-- **`missiles.ank`** - Missile system automation
-- **`moonsToPlanets.ank`** - Moon to planet transfers
+- **`ipmAttack.ank`** - Builds and launches interplanetary missiles at a target repeatedly
+- **`moonsToPlanetsLC.ank`** - Sends the Large Cargos from every moon down to its planet
 - **`planetsToMoons.ank`** - Planet to moon transfers
 - **`repatriateNow.ank`** - Resource repatriation
-- **`setFarmerSession.ank`** - Farming session configuration
-- **`transferShips.ank`** - Ship transfer automation
+- **`createFarmSessions.ank`** - Creates farm sessions covering every galaxy
+- **`moonsToHomeworld.ank`** - Parks the extra cargos from every moon on the homeworld
 - **`homeworldToPlanets.ank`** - Sends a fixed number of Large Cargos from the homeworld to every planet
 - **`planetsToHomeworld.ank`** - Brings the Large Cargos from every planet back to the homeworld with all the resources they can carry
 - **`dailyReport.ank`** - Daily Telegram report: points/rank change, resources per planet, fleet totals, slots
@@ -62,6 +62,7 @@ AnkoScripts is a comprehensive automation toolkit for OGame players who want to 
 - **`debrisHarvester.ank`** - Scans galaxies for expedition debris and sends pathfinders from the nearest planet/moon
 - **`expeditionManager.ank`** - Keeps expedition slots busy, rotating origins and leaving fleet slots free
 - **`fleetBalancer.ank`** - Moves surplus ships so every planet reaches a target amount per ship type
+- **`fleetsaveToMoons.ank`** - Fleetsaves all ships (and resources) from every planet/moon to random own moons 1-2 galaxies away at 10%, with human-like timing
 
 ## ⚙️ Prerequisites
 
@@ -103,7 +104,7 @@ minPosition = 7
 maxPosition = 9
 ```
 
-For `buildShips.ank`:
+For `buildLargeCargos.ank`:
 ```javascript
 // Configure ship building parameters
 shipsDesired = 500

@@ -1,0 +1,281 @@
+//////////////////////////////////////
+// SETTINGS
+
+// Fleetsave: every planet/moon parks ALL its ships (and resources) on a random own moon
+// 1 or 2 galaxies away. Galaxies are circular: next to 5 are 4 and 1.
+
+numGalaxies = 5
+oneGalaxyChance = 70            // % of fleets that go 1 galaxy away; the rest go 2 away
+fleetSpeed = TEN_PERCENT
+sendResources = true            // also take all resources
+includePlanets = true           // fleetsave planets
+includeMoons = true             // fleetsave moons
+
+startDelayMin = 1               // minutes before the first send (random between min and max)
+startDelayMax = 5
+minDelay = 15000                // ms between sends
+maxDelay = 60000
+longPauseChance = 15            // % chance of an extra "distracted" pause after a send
+longPauseMin = 60000            // ms
+longPauseMax = 180000
+
+// Recall: true = cancel each fleet halfway so it flies back home on its own and is back
+// between returnFromHour and returnToHour (server time). false = fleets stay parked on the moons.
+useRecall = true
+returnFromHour = 7
+returnToHour = 8
+timezoneOffsetHours = 1         // server time minus UTC
+
+//////////////////////////////////////
+// COMMON (same block in every script)
+
+UserName = GetCachedPlayer().PlayerName
+UniverseName = GetUniverseName()
+
+// level: "info" = bot log only | "report" = log + Telegram | "warn" / "error" = log + Telegram
+func Notify(level, msg) {
+    text = UserName + " (" + UniverseName + ") ::: " + msg
+    if level == "error" {
+        LogError(text)
+    } else if level == "warn" {
+        LogWarn(text)
+    } else {
+        LogInfo(text)
+    }
+    if level != "info" {
+        SendTelegram(TELEGRAM_CHAT_ID, text)
+    }
+}
+
+//////////////////////////////////////
+// MAIN
+
+// Circular galaxy distance: in 5 galaxies, 5 -> 1 is 1, 5 -> 2 is 2
+func GalaxyDistance(a, b) {
+    d = a - b
+    if d < 0 { d = -d }
+    if numGalaxies - d < d { d = numGalaxies - d }
+    return d
+}
+
+// Random own moon exactly `dist` galaxies away, preferring moons not used yet this run
+func PickMoon(fromCoord, dist) {
+    fresh = []
+    used = []
+    for m in GetCachedMoons() {
+        c = m.Coordinate
+        if GalaxyDistance(c.Galaxy, fromCoord.Galaxy) != dist {
+            continue
+        }
+        if usedMoons["" + m.GetID()] == true {
+            used += c
+        } else {
+            fresh += c
+        }
+    }
+    if len(fresh) > 0 {
+        return fresh[Random(0, len(fresh) - 1)]
+    }
+    if len(used) > 0 {
+        return used[Random(0, len(used) - 1)]
+    }
+    return nil
+}
+
+// 1 galaxy away most of the time, 2 away otherwise; falls back to the other distance
+func PickDestination(fromCoord) {
+    first = 2
+    second = 1
+    if Random(1, 100) <= oneGalaxyChance {
+        first = 1
+        second = 2
+    }
+    dest = PickMoon(fromCoord, first)
+    if dest == nil {
+        dest = PickMoon(fromCoord, second)
+    }
+    return dest
+}
+
+// Marks the moon at a coordinate as used
+func MarkUsed(coord) {
+    for m in GetCachedMoons() {
+        c = m.Coordinate
+        if c.Galaxy == coord.Galaxy && c.System == coord.System && c.Position == coord.Position {
+            usedMoons["" + m.GetID()] = true
+        }
+    }
+}
+
+usedMoons = {}
+pendingRecalls = []             // [fleetID, cancelAt, origin, dest, returnAt]
+
+func Pad2(n) {
+    if n < 10 {
+        return "0" + n
+    }
+    return "" + n
+}
+
+// "HH:MM" (server time) of a timestamp
+func HourText(ts) {
+    secOfDay = (ts + timezoneOffsetHours * 3600) % 86400
+    return Pad2(int(secOfDay / 3600)) + ":" + Pad2(int((secOfDay % 3600) / 60))
+}
+
+// Next return window: today if it is still at least 1h away, otherwise tomorrow
+year, month, day = Date()
+dayStart = Unix(0, 0).AddDate(year - 1970, month - 1, day - 1).Unix()
+windowStart = dayStart + returnFromHour * 3600 - timezoneOffsetHours * 3600
+if windowStart < GetTimestamp() + 3600 {
+    windowStart = windowStart + 24 * 3600
+}
+windowEnd = windowStart + (returnToHour - returnFromHour) * 3600
+
+// Origins in random order, like a human clicking around
+origins = []
+if includePlanets {
+    for p in GetCachedPlanets() {
+        origins += p.Coordinate
+    }
+}
+if includeMoons {
+    for m in GetCachedMoons() {
+        origins += m.Coordinate
+    }
+}
+for i = len(origins) - 1; i > 0; i-- {
+    j = Random(0, i)
+    tmp = origins[i]
+    origins[i] = origins[j]
+    origins[j] = tmp
+}
+
+startIn = Random(startDelayMin * 60, startDelayMax * 60)
+modeText = "fleets stay parked"
+if useRecall {
+    modeText = "recall, back between " + HourText(windowStart) + " and " + HourText(windowEnd)
+}
+Notify("report", "🛡️ Fleetsave to moons in " + ShortDur(startIn) + ": " + len(origins) + " origins, galaxies +/-1..2, " + modeText)
+Sleep(startIn * 1000)
+
+sent = 0
+skipped = 0
+failed = 0
+summary = []
+for origin in origins {
+    // "Looking at the planet" before deciding
+    Sleep(Random(2000, 6000))
+
+    ships, err = GetCachedCelestial(origin).GetShips()
+    if err != nil {
+        failed = failed + 1
+        Notify("error", "Could not read ships on " + origin + ": " + err)
+        continue
+    }
+    if ships.CountShips() == 0 {
+        skipped = skipped + 1
+        Notify("info", origin + " has no ships, skipping")
+        continue
+    }
+
+    dest = PickDestination(origin)
+    if dest == nil {
+        skipped = skipped + 1
+        Notify("warn", origin + ": no own moon 1-2 galaxies away, fleet stays")
+        continue
+    }
+
+    secs, _ = FlightTime(origin, dest, fleetSpeed, ships)
+
+    fleet = NewFleet()
+    fleet.SetOrigin(origin)
+    fleet.SetDestination(dest)
+    fleet.SetSpeed(fleetSpeed)
+    fleet.SetMission(PARK)
+    fleet.SetAllShips()
+    if sendResources {
+        fleet.SetAllResources()
+    }
+    Sleep(Random(1500, 4000))       // "checking the fleet screen"
+    fleet, err = fleet.SendNow()
+
+    if err != nil {
+        failed = failed + 1
+        Notify("error", origin + " ➡️ " + dest + " failed: " + err)
+        Sleep(Random(3000, 8000))
+        continue
+    }
+
+    MarkUsed(dest)
+    sent = sent + 1
+    line = origin + " ➡️ 🌙 " + dest + " (" + ShortDur(secs) + ")"
+
+    if useRecall {
+        // Away time = 2 x time until cancel, so cancel halfway to the chosen return time
+        now = GetTimestamp()
+        returnAt = Random(windowStart, windowEnd)
+        cancelAt = now + int((returnAt - now) / 2)
+        if cancelAt - now + 300 < secs {
+            pendingRecalls += [[fleet.ID, cancelAt, origin, dest, returnAt]]
+            line = line + " | back ~" + HourText(returnAt)
+        } else {
+            line = line + " | ⚠️ too short to recall, stays parked"
+        }
+    }
+    summary += line
+    Notify("info", line)
+
+    Sleep(Random(minDelay, maxDelay))
+    if Random(1, 100) <= longPauseChance {
+        Sleep(Random(longPauseMin, longPauseMax))
+    }
+}
+
+report = "🛡️ Fleetsave done. Sent: " + sent + " | Skipped: " + skipped + " | Failed: " + failed
+for line in summary {
+    report = report + "\n" + line
+}
+Notify("report", report)
+
+//////////////////////////////////////
+// RECALLS
+
+if useRecall && len(pendingRecalls) > 0 {
+    recalled = 0
+    recallFailed = 0
+    for len(pendingRecalls) > 0 {
+        // Next fleet to cancel
+        next = 0
+        for i = 1; i < len(pendingRecalls); i++ {
+            if pendingRecalls[i][1] < pendingRecalls[next][1] {
+                next = i
+            }
+        }
+        r = pendingRecalls[next]
+        wait = r[1] - GetTimestamp()
+        if wait > 0 {
+            Notify("info", "Next recall (" + r[2] + ") in " + ShortDur(wait))
+            Sleep(wait * 1000)
+        }
+
+        err = CancelFleet(r[0])
+        if err != nil {
+            recallFailed = recallFailed + 1
+            Notify("warn", "Recall " + r[2] + " ➡️ " + r[3] + " failed (fleet stays parked on the moon): " + err)
+        } else {
+            recalled = recalled + 1
+            Notify("info", "Recalled " + r[2] + ", back ~" + HourText(r[4]))
+        }
+
+        remaining = []
+        for i = 0; i < len(pendingRecalls); i++ {
+            if i != next {
+                remaining += [pendingRecalls[i]]
+            }
+        }
+        pendingRecalls = remaining
+        Sleep(Random(2000, 8000))
+    }
+    Notify("report", "🛡️ Recalls done. Recalled: " + recalled + " | Failed: " + recallFailed + ". Fleets are flying home.")
+}

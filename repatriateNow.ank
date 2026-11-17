@@ -1,7 +1,7 @@
 //////////////////////////////////////
 // SETTINGS
 
-arrivalWaitMinutes = 5   // extra wait after moonsToPlanets so its fleets land before planetsToMoons
+arrivalWaitMinutes = 5   // extra wait after moonsToPlanetsLC so its fleets land before planetsToMoons
 
 //////////////////////////////////////
 // COMMON (same block in every script)
@@ -38,7 +38,7 @@ func StartAndWait(scriptName) {
 }
 
 Notify("report", "🔁 Repatriate started")
-StartAndWait("moonsToPlanets.ank")
+StartAndWait("moonsToPlanetsLC.ank")
 // The script ends right after the last send; give those fleets time to arrive
 Sleep(arrivalWaitMinutes * 60 * 1000)
 StartAndWait("planetsToMoons.ank")
