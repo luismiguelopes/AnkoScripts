@@ -34,6 +34,71 @@ func Notify(level, msg) {
 //////////////////////////////////////
 // MAIN
 
+// Count of one ship type in a ShipsInfos
+func ShipCount(allShips, shipType) {
+    if shipType == LIGHTFIGHTER { return allShips.LightFighter }
+    if shipType == HEAVYFIGHTER { return allShips.HeavyFighter }
+    if shipType == CRUISER { return allShips.Cruiser }
+    if shipType == BATTLESHIP { return allShips.Battleship }
+    if shipType == SMALLCARGO { return allShips.SmallCargo }
+    if shipType == LARGECARGO { return allShips.LargeCargo }
+    if shipType == COLONYSHIP { return allShips.ColonyShip }
+    if shipType == BATTLECRUISER { return allShips.Battlecruiser }
+    if shipType == BOMBER { return allShips.Bomber }
+    if shipType == DESTROYER { return allShips.Destroyer }
+    if shipType == DEATHSTAR { return allShips.Deathstar }
+    if shipType == RECYCLER { return allShips.Recycler }
+    if shipType == ESPIONAGEPROBE { return allShips.EspionageProbe }
+    if shipType == REAPER { return allShips.Reaper }
+    if shipType == PATHFINDER { return allShips.Pathfinder }
+    return 0
+}
+
+// Adds every flying ship explicitly (SetAllShips() is undocumented and the cargo must count every ship)
+func AddAllShips(fleet, ships) {
+    for t in [LIGHTFIGHTER, HEAVYFIGHTER, CRUISER, BATTLESHIP, BATTLECRUISER, BOMBER, DESTROYER, DEATHSTAR, SMALLCARGO, LARGECARGO, COLONYSHIP, RECYCLER, ESPIONAGEPROBE, REAPER, PATHFINDER] {
+        n = ShipCount(ships, t)
+        if n > 0 {
+            fleet.AddShips(t, n)
+        }
+    }
+}
+
+// Loads as much as the cargo holds: deuterium first, then crystal, then metal.
+// Replaces SetAllResources(), which left the fleets empty. Call it after the ships are added.
+// The flight's fuel stays on the celestial and its space is kept free in the cargo.
+// ships: a ShipsInfos with exactly the ships in the fleet (Cargo() does not accept the fleet builder).
+// Returns the total loaded (0 on error, the fleet still leaves with its ships).
+func LoadAllResources(fleet, celestial, ships) {
+    res, err = celestial.GetResources()
+    if err != nil {
+        Notify("warn", "" + celestial.GetCoordinate() + ": could not read resources, fleet leaves empty: " + err)
+        return 0
+    }
+    _, fuel = fleet.FlightTime()
+    space = -1
+    try {
+        space = Cargo(ships) - fuel
+    } catch e {
+        Notify("warn", "Cargo() failed (" + e + "), falling back to SetAllResources")
+        fleet.SetAllResources()
+        return 0
+    }
+    if space < 0 { space = 0 }
+    d = res.Deuterium - fuel
+    if d < 0 { d = 0 }
+    if d > space { d = space }
+    space = space - d
+    c = res.Crystal
+    if c > space { c = space }
+    space = space - c
+    m = res.Metal
+    if m > space { m = space }
+    fleet.SetResources(NewResources(Floor(m), Floor(c), Floor(d)))
+    return Floor(m) + Floor(c) + Floor(d)
+}
+
+
 Notify("report", "🚀 Planets ➡️ Moons started")
 
 // Positions that have a moon ("galaxy:system:position")
@@ -58,12 +123,23 @@ for planet in GetCachedPlanets() {
 
     Sleep(Random(1500, 3000))  // Human analysis time
 
+    ships, err = GetCachedCelestial(origin).GetShips()
+    if err != nil {
+        failed = failed + 1
+        Notify("error", "🪐 " + origin + " could not read ships: " + err)
+        continue
+    }
+    if ships.CountShips() == 0 {
+        Notify("info", "No ships on " + origin + ", skipping")
+        continue
+    }
+
     fleet = NewFleet()
     fleet.SetOrigin(origin)
     fleet.SetDestination(destination)
     fleet.SetMission(PARK)
-    fleet.SetAllShips()
-    fleet.SetAllResources()
+    AddAllShips(fleet, ships)
+    LoadAllResources(fleet, GetCachedCelestial(origin), ships)
 
     Sleep(Random(2000, 4000))  // Decision delay
 

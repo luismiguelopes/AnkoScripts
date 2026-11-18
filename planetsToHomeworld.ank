@@ -37,6 +37,41 @@ func Notify(level, msg) {
 //////////////////////////////////////
 // MAIN
 
+// Loads as much as the cargo holds: deuterium first, then crystal, then metal.
+// Replaces SetAllResources(), which left the fleets empty. Call it after the ships are added.
+// The flight's fuel stays on the celestial and its space is kept free in the cargo.
+// ships: a ShipsInfos with exactly the ships in the fleet (Cargo() does not accept the fleet builder).
+// Returns the total loaded (0 on error, the fleet still leaves with its ships).
+func LoadAllResources(fleet, celestial, ships) {
+    res, err = celestial.GetResources()
+    if err != nil {
+        Notify("warn", "" + celestial.GetCoordinate() + ": could not read resources, fleet leaves empty: " + err)
+        return 0
+    }
+    _, fuel = fleet.FlightTime()
+    space = -1
+    try {
+        space = Cargo(ships) - fuel
+    } catch e {
+        Notify("warn", "Cargo() failed (" + e + "), falling back to SetAllResources")
+        fleet.SetAllResources()
+        return 0
+    }
+    if space < 0 { space = 0 }
+    d = res.Deuterium - fuel
+    if d < 0 { d = 0 }
+    if d > space { d = space }
+    space = space - d
+    c = res.Crystal
+    if c > space { c = space }
+    space = space - c
+    m = res.Metal
+    if m > space { m = space }
+    fleet.SetResources(NewResources(Floor(m), Floor(c), Floor(d)))
+    return Floor(m) + Floor(c) + Floor(d)
+}
+
+
 home = GetHomeWorld()
 
 lcText = "all"
@@ -77,7 +112,9 @@ for planet in GetCachedPlanets() {
     fleet.SetSpeed(fleetSpeed)
     fleet.SetMission(PARK)
     fleet.AddShips(LARGECARGO, lc)
-    fleet.SetAllResources()     // takes as much as the cargos can carry
+    lcShips = NewShipsInfos()
+    lcShips.Set(LARGECARGO, lc)
+    LoadAllResources(fleet, GetCachedCelestial(origin), lcShips)     // as much as the cargos can carry
     fleet, err = fleet.SendNow()
 
     if err != nil {
