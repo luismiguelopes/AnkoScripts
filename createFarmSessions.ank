@@ -1,16 +1,45 @@
-import "math/rand"
-import "math"
+import "strings"
 
-// NOTE: every run creates new farm sessions. Delete the old ones in the bot before running again.
+// Creates the farm sessions every day, automatically, from your moons (or planets
+// in a galaxy without moons).
+// - Each origin gets the systems closest to it (circular galaxy, 499 -> 1). Areas never overlap
+//   and together cover the whole galaxy.
+// - The border between two origins moves a little every day, and each area is split into several
+//   sessions of random size, so the ranges change from one day to the next.
+// - Before creating, it deletes the sessions it created the day before (those whose name starts
+//   with sessionPrefix). Sessions created by hand, or by an older version of this script, are not touched.
+// - Sessions run one at a time: the new ones go to the farmer's queue, in random order.
 
-// Example of origins per galaxy (adapt for your planets/moons)
-origins = [
-    [GetHomeWorld()], // Galaxy 1
-    ["M:2:100:10", "M:2:200:12", "M:2:350:8"], // Galaxy 2
-    ["M:3:142:15"],
-    ["M:4:128:15"],
-    ["M:5:381:15"]
-]
+//////////////////////////////////////
+// SETTINGS
+
+sessionPrefix = "AutoFarm"      // name of the sessions created (and deleted) by this script
+systemsPerGalaxy = 499
+minChunk = 35                   // smallest session, in systems
+maxChunk = 80                   // largest session, in systems
+borderJitter = 12               // the border between two origins moves up to +/- this many systems
+
+repeatDaily = true              // false = create once and stop
+createHour = 6                  // server time; recreate every day between createHour and +60 min
+timezoneOffsetHours = 1         // server time minus UTC
+
+// Settings of every session
+probes = 10
+additionalCargo = 10            // percent, 0-50
+minimumResourcesToAttack = 3000000
+minimumPlayerRank = 0           // 0 = no limit
+deleteReports = false           // true = delete the espionage and combat reports of the farm
+
+// Waves ("majority"): the next wave leaves once this share of the raids is back, then waits
+// up to this many minutes for the ones arriving just after. Picked at random for every session.
+majorityMinPercent = 60
+majorityMaxPercent = 80
+majorityMinWait = 3             // minutes
+majorityMaxWait = 12            // minutes
+
+// Pause between two raids of a wave, in seconds (min at least 2). Picked at random for every session.
+attackDelayMin = [3, 6]         // the session's minimum pause is picked between these
+attackDelayMax = [10, 25]       // the session's maximum pause is picked between these
 
 //////////////////////////////////////
 // COMMON (same block in every script)
@@ -40,83 +69,223 @@ func Notify(level, msg) {
     }
 }
 
-// System of an origin. Works with "M:2:100:10" strings and with celestials like GetHomeWorld()
-func GetSystem(origin) {
-    celestial = GetCachedCelestial(origin)
-    if celestial == nil {
-        LogError("Origin " + origin + " is not one of your planets/moons")
-        return -1
+//////////////////////////////////////
+// MAIN
+
+// Integer division for a, b >= 0 ("/" always returns a float in this Anko)
+func IntDiv(a, b) {
+    q = 0
+    for (q + 1) * b <= a {
+        q = q + 1
     }
-    return celestial.GetCoordinate().System
+    return q
 }
 
-// Circular distance between two systems (1-499)
-func CircularDistance(a, b) {
-    d = math.Abs(float64(a - b))
-    return math.Min(d, 499 - d)
+// Brings any system number back into 1..systemsPerGalaxy (circular galaxy)
+func Wrap(s) {
+    return ((s - 1) % systemsPerGalaxy + systemsPerGalaxy) % systemsPerGalaxy + 1
 }
 
-func CreateFarmSession(origin, galaxy, start, end, fastAttacking) {
+// Origins of a galaxy, sorted by system: [[system, celestial], ...]
+func OriginsOf(galaxy, celestials) {
+    list = []
+    for c in celestials {
+        coord = c.GetCoordinate()
+        if coord.Galaxy != galaxy {
+            continue
+        }
+        // keep one origin per system
+        dup = false
+        for o in list {
+            if o[0] == coord.System {
+                dup = true
+            }
+        }
+        if !dup {
+            list += [[coord.System, c]]
+        }
+    }
+    // insertion sort by system
+    for i = 1; i < len(list); i++ {
+        j = i
+        for j > 0 && list[j-1][0] > list[j][0] {
+            tmp = list[j-1]
+            list[j-1] = list[j]
+            list[j] = tmp
+            j = j - 1
+        }
+    }
+    return list
+}
+
+// Splits `length` systems starting at `start` into random chunks: [[galaxy, from, to, origin, fromMoon], ...]
+func SplitArea(galaxy, start, length, origin, fromMoon) {
+    chunks = []
+    s = start
+    remaining = length
+    for remaining > 0 {
+        size = Random(minChunk, maxChunk)
+        if remaining - size < minChunk {
+            size = remaining
+        }
+        chunks += [[galaxy, Wrap(s), Wrap(s + size - 1), origin, fromMoon]]
+        s = s + size
+        remaining = remaining - size
+    }
+    return chunks
+}
+
+// Every session to create today, for every galaxy where you have a moon or a planet
+func PlanSessions() {
+    moons = GetCachedMoons()
+    planets = GetCachedPlanets()
+    maxGalaxy = 0
+    for c in planets {
+        if c.GetCoordinate().Galaxy > maxGalaxy {
+            maxGalaxy = c.GetCoordinate().Galaxy
+        }
+    }
+    chunks = []
+    for g = 1; g <= maxGalaxy; g++ {
+        origins = OriginsOf(g, moons)
+        fromMoon = true
+        if len(origins) == 0 {
+            origins = OriginsOf(g, planets)
+            fromMoon = false
+        }
+        n = len(origins)
+        if n == 0 {
+            continue
+        }
+        if !fromMoon {
+            Notify("warn", "G" + g + ": no moon, sessions start from planets")
+        }
+        if n == 1 {
+            chunks += SplitArea(g, Random(1, systemsPerGalaxy), systemsPerGalaxy, origins[0][1], fromMoon)
+            continue
+        }
+        // cuts[i] = last system (not wrapped) of origin i: halfway to the next origin, moved a bit
+        cuts = []
+        for i = 0; i < n; i++ {
+            cur = origins[i][0]
+            next = origins[(i + 1) % n][0]
+            gap = ((next - cur) % systemsPerGalaxy + systemsPerGalaxy) % systemsPerGalaxy
+            jitter = borderJitter
+            if jitter > IntDiv(gap, 4) {
+                jitter = IntDiv(gap, 4)
+            }
+            cuts += [cur + IntDiv(gap, 2) + Random(-jitter, jitter)]
+        }
+        for i = 0; i < n; i++ {
+            prevCut = cuts[(i + n - 1) % n]
+            length = ((cuts[i] - prevCut) % systemsPerGalaxy + systemsPerGalaxy) % systemsPerGalaxy
+            chunks += SplitArea(g, prevCut + 1, length, origins[i][1], fromMoon)
+        }
+    }
+    // random order, so the queue is different every day
+    for i = len(chunks) - 1; i > 0; i-- {
+        j = Random(0, i)
+        tmp = chunks[i]
+        chunks[i] = chunks[j]
+        chunks[j] = tmp
+    }
+    return chunks
+}
+
+// Deletes the sessions created by this script (name starts with sessionPrefix)
+func DeleteOldSessions() {
+    deleted = 0
+    try {
+        for s in GetFarmSessions() {
+            if strings.HasPrefix(s.Name, sessionPrefix) {
+                DeleteFarmSession(s.ID)
+                deleted = deleted + 1
+                Sleep(Random(500, 1500))
+            }
+        }
+    } catch e {
+        Notify("warn", "Could not delete the old sessions (needs Kepler 1.82.653+): " + e)
+    }
+    return deleted
+}
+
+func CreateSession(chunk) {
+    galaxy = chunk[0]
+    from = chunk[1]
+    to = chunk[2]
+    origin = chunk[3]
+    name = sessionPrefix + " G" + galaxy + " " + from + "-" + to
     s = NewFarmSession()
+    s.SetName(name)
     s.SetOrigin(origin)
-    s.SetRange(galaxy, start, end)
-    s.SetProbes(10)
-    s.SetAdditionalCargo(10)
-    s.SetMinimumResourcesToAttack(4000000)
-    s.SetMinimumDefensesToIgnore(0)
+    s.SetRange(galaxy, from, to)
+    s.SetProbes(probes)
+    s.SetAdditionalCargo(additionalCargo)
+    s.SetMinimumResourcesToAttack(minimumResourcesToAttack)
+    // Only targets with no defense: Kepler accepts a target whose seen defense is strictly below n
+    s.SetMinimumDefensesToIgnore(1)
+    s.SetAttackPlayersWithDefenses(false)
     s.SetMinimumStorageToIgnore(5, 5, 5)
-    s.SetMinimumPlayerRank(0)
+    s.SetMinimumPlayerRank(minimumPlayerRank)
     s.SetEspionageProbeRaids(false)
-    s.SetFastAttacking(fastAttacking)
+    // Probes and raids leave from the origin of this session, never from the nearest celestial
+    // (in Kepler both flags are the same mode, so both are set to false)
     s.SetAttackFromNearestPlanet(false)
-    s.SetAttackFromNearestMoon(true)
-    s.SetDeleteCombatReports(true)
+    s.SetAttackFromNearestMoon(false)
+    // Waves: no SetFastAttacking here, it would overwrite the strategy
+    s.SetFarmStrategy("majority")
+    s.SetMajority(Random(majorityMinPercent, majorityMaxPercent), Random(majorityMinWait, majorityMaxWait))
+    delayMin = Random(attackDelayMin[0], attackDelayMin[1])
+    delayMax = Random(attackDelayMax[0], attackDelayMax[1])
+    if delayMax < delayMin {
+        delayMax = delayMin
+    }
+    s.SetAttackDelay(delayMin, delayMax)
+    s.SetDeleteCombatReports(deleteReports)
     s.SetFarmSpeed(HUNDRED_PERCENT)
     s.SetPriorityRatio(1, 1, 1)
     session, err = s.BuildFarmSession()
     if err != nil {
-        Notify("error", "Farm session G" + galaxy + " " + start + "-" + end + " failed: " + err)
+        Notify("error", "Farm session " + name + " failed: " + err)
         return false
     }
-    Notify("info", "Farm session " + session.ID + ": G" + galaxy + " " + start + "-" + end + " from " + origin)
+    Notify("info", "Farm session " + session.ID + ": " + name + " from " + origin.GetCoordinate())
     return true
 }
 
-// For each galaxy from 1 to 5
-created = 0
-failed = 0
-for g = 1; g <= 5; g++ {
-    galOrigins = origins[g-1]
-    start = 1
-    for start <= 499 {
-        size = rand.Intn(100) + 50 // 50-149
-        end = start + size - 1
-        if end > 499 {
-            end = 499
-        }
-        // Calculate the center system of the interval
-        center = Floor((start + end) / 2)
-        // Choose the origin closest to the center (circular)
-        minDist = 1000
-        bestOrigin = galOrigins[0]
-        for o = 0; o < len(galOrigins); o++ {
-            sys = GetSystem(galOrigins[o])
-            if sys < 0 {
-                continue
-            }
-            dist = CircularDistance(sys, center)
-            if dist < minDist {
-                minDist = dist
-                bestOrigin = galOrigins[o]
-            }
-        }
-        if CreateFarmSession(bestOrigin, g, start, end, false) {
+func CreateAll() {
+    deleted = DeleteOldSessions()
+    chunks = PlanSessions()
+    created = 0
+    failed = 0
+    for chunk in chunks {
+        if CreateSession(chunk) {
             created = created + 1
         } else {
             failed = failed + 1
         }
-        start = end + 1
+        Sleep(Random(2000, 6000))
     }
+    Notify("report", "🌾 Farm sessions: " + deleted + " deleted, " + created + " created, " + failed + " failed")
 }
 
-Notify("report", "🌾 Farm sessions created: " + created + " | Failed: " + failed)
+// Sleeps until tomorrow at createHour (plus up to 60 random minutes)
+func SleepUntilTomorrow() {
+    year, month, day = Date()
+    t = Unix(0, 0).AddDate(year - 1970, month - 1, day)    // tomorrow 00:00 UTC
+    at = t.Unix() + createHour * 3600 + Random(0, 3600) - timezoneOffsetHours * 3600
+    secs = at - GetTimestamp()
+    if secs < 3600 {
+        secs = secs + 86400
+    }
+    Notify("info", "Next farm sessions in " + ShortDur(secs))
+    Sleep(secs * 1000)
+}
+
+for {
+    CreateAll()
+    if !repeatDaily {
+        break
+    }
+    SleepUntilTomorrow()
+}

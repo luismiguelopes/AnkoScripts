@@ -43,7 +43,7 @@ Every script is standalone. Open it, adjust the `SETTINGS` block at the top and 
 ### 🌾 Farming, expeditions and auctions
 
 - **`farmSchedule.ank`** - Pauses and resumes the bot's farming on a human-like daily schedule (work cycles, breaks, lunch, night)
-- **`createFarmSessions.ank`** - Creates farm sessions covering every galaxy from the nearest origin (each run creates new sessions)
+- **`createFarmSessions.ank`** - Every day, replaces its farm sessions with new ones: each moon gets the systems closest to it (circular galaxy, no overlap), with borders moved a little and split into random-sized sessions
 - **`expeditionManager.ank`** - Keeps expedition slots busy, rotating origins and always leaving some fleet slots free
 - **`debrisHarvester.ank`** - Scans galaxies for expedition debris and sends pathfinders from the nearest planet/moon
 - **`scanExpeditionDebris.ank`** - Scans one galaxy and reports large expedition debris fields (no fleets sent)
@@ -77,7 +77,7 @@ Settings you must fill in before the first run:
 - `timezoneOffsetHours` (server time minus UTC) in `nightFleetsave`, `farmSchedule`, `dailyReport` and `fleetsaveToMoons`
 - `resourceCollector.ank`: `lcCapacity` for your Hyperspace Technology level
 - `buildDef.ank`: one entry in `factors` per planet, in the in-game order
-- Coordinates and origins in `ipmAttack`, `createFarmSessions` and `expeditionManager`
+- Coordinates and origins in `ipmAttack` and `expeditionManager`
 
 ## 🧱 Script structure and logging
 
