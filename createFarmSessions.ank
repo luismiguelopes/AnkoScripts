@@ -1,5 +1,3 @@
-import "strings"
-
 // Creates the farm sessions every day, automatically, from your moons (or planets
 // in a galaxy without moons).
 // - Each origin gets the systems closest to it (circular galaxy, 499 -> 1). Areas never overlap
@@ -192,12 +190,17 @@ func PlanSessions() {
     return chunks
 }
 
+// True if name starts with prefix (no imports in Kepler's Anko, so no strings.HasPrefix)
+func StartsWith(name, prefix) {
+    return len(name) >= len(prefix) && name[0:len(prefix)] == prefix
+}
+
 // Deletes the sessions created by this script (name starts with sessionPrefix)
 func DeleteOldSessions() {
     deleted = 0
     try {
         for s in GetFarmSessions() {
-            if strings.HasPrefix(s.Name, sessionPrefix) {
+            if StartsWith(s.Name, sessionPrefix) {
                 DeleteFarmSession(s.ID)
                 deleted = deleted + 1
                 Sleep(Random(500, 1500))
