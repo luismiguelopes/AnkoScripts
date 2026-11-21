@@ -1,8 +1,36 @@
 //////////////////////////////////////
 // SETTINGS
 
-systemOffset = 0            // target system = moon system + offset (position 1)
-fleetSpeed = FOURTY_PERCENT
+// Fleetsave with the Colonize mission: the colony ship reaches a slot where colonizing fails
+// and the whole fleet flies straight back, so the trip home takes as long as the trip out.
+// The script picks, per moon, the destination (distance) and the speed so that every fleet
+// lands back home at one common time: away time = 2 x one-way flight.
+// ⚠️ The target slot must NOT be colonizable (occupied, or position 1/15 without Astrophysics 8),
+// otherwise the colony ship really colonizes it.
+
+includeMoons = true
+includePlanets = false
+targetPosition = 1              // planet position the fleets are sent to
+
+// Return time: one common time is picked at random between returnFromHour and returnToHour
+// (server time, the next window at least 1h away) and every fleet aims for it +/- returnSpread minutes.
+returnFromHour = 10
+returnToHour = 11
+returnSpread = 5                // minutes
+timezoneOffsetHours = 1         // server time minus UTC
+
+// Search space
+numGalaxies = 5
+numSystems = 499
+maxSystemOffset = 250           // systems away in the same galaxy (both directions)
+allowOtherGalaxies = true       // also try the same system in other galaxies (long trips)
+generalClass = false            // true: 5% speed steps (General), false: 10% steps
+toleranceMinutes = 3            // landings within this of the target count as "on time"; the cheapest speed among them wins
+warnMinutes = 15                // report a warning when the best landing is further off than this
+departureLagSecs = 8            // SendNow waits 7-9 s after the previous departure
+
+minDelay = 5000                 // ms between sends
+maxDelay = 20000
 
 //////////////////////////////////////
 // COMMON (same block in every script)
@@ -99,53 +127,245 @@ func LoadAllResources(fleet, celestial, ships) {
     return Floor(m) + Floor(c) + Floor(d)
 }
 
+//////////////////////////////////////
+// MAIN
 
-// Returns "sent", "skipped" or "failed"
-func FleetSaveFromMoon(moon) {
-    origin = moon.Coordinate
+func Pad2(n) {
+    if n < 10 {
+        return "0" + n
+    }
+    return "" + n
+}
+
+// "HH:MM" (server time) of a timestamp
+func HourText(ts) {
+    secOfDay = (ts + timezoneOffsetHours * 3600) % 86400
+    return Pad2(Floor(secOfDay / 3600)) + ":" + Pad2(Floor((secOfDay % 3600) / 60))
+}
+
+// "+3m" / "-1m" / "0m"
+func DiffText(secs) {
+    m = Round(secs / 60)
+    if m > 0 {
+        return "+" + m + "m"
+    }
+    return "" + m + "m"
+}
+
+func Wrap(n, size) {
+    return ((n - 1) % size + size) % size + 1
+}
+
+// Speeds the account can use (10 = 100%), slowest first
+func SpeedList() {
+    list = []
+    if generalClass {
+        for i = 1; i <= 20; i++ {
+            list += i * 0.5
+        }
+    } else {
+        for i = 1; i <= 10; i++ {
+            list += i
+        }
+    }
+    return list
+}
+
+// Every destination the fleet may aim for, with its distance (Distance() makes no request)
+func Candidates(origin) {
+    list = []
+    for k = -maxSystemOffset; k <= maxSystemOffset; k++ {
+        if k == 0 && targetPosition == origin.Position {
+            continue
+        }
+        dest = NewCoordinate(origin.Galaxy, Wrap(origin.System + k, numSystems), targetPosition, PLANET_TYPE)
+        list += [[dest, Distance(origin, dest)]]
+    }
+    if allowOtherGalaxies {
+        for dg = 1; dg <= Floor(numGalaxies / 2); dg++ {
+            for sign in [1, -1] {
+                g = Wrap(origin.Galaxy + sign * dg, numGalaxies)
+                if g == origin.Galaxy {
+                    continue
+                }
+                dest = NewCoordinate(g, origin.System, targetPosition, PLANET_TYPE)
+                list += [[dest, Distance(origin, dest)]]
+            }
+        }
+    }
+    return list
+}
+
+// Picks the route and speed whose return lands closest to returnAt.
+// OGame flight time is t = a + B * sqrt(distance) / speed, so two FlightTime calls on one route
+// (one request at most) give a and B; the model then ranks every candidate without requests.
+// The pick is checked with the real FlightTime and the model is corrected (up to 3 rounds),
+// because universes that skip empty systems shorten real distances.
+// Returns [dest, speed, oneWaySecs, fuel] or nil.
+func PlanRoute(origin, ships, returnAt) {
+    ref = NewCoordinate(origin.Galaxy, Wrap(origin.System + 1, numSystems), targetPosition, PLANET_TYPE)
+    t100, _ = FlightTime(origin, ref, HUNDRED_PERCENT, ships, COLONIZE)
+    t10, _ = FlightTime(origin, ref, TEN_PERCENT, ships, COLONIZE)
+    if t100 <= 0 || t10 <= t100 {
+        Notify("warn", "" + origin + ": FlightTime gave " + t10 + "/" + t100 + " s, cannot plan the return")
+        return nil
+    }
+    B = (t10 - t100) * 10 / 9
+    a = t10 - B
+    if a < 0 { a = 0 }
+    k = B / Sqrt(Distance(origin, ref))
+
+    speeds = SpeedList()
+    cands = Candidates(origin)
+    tolerance = toleranceMinutes * 60
+    corr = 1.0
+    best = nil
+    bestErr = -1
+    for iter = 0; iter < 3; iter++ {
+        departAt = GetTimestamp() + departureLagSecs
+        oneWay = (returnAt - departAt) / 2
+
+        // Model: best error, then the slowest speed within tolerance (fuel grows with speed)
+        minErr = -1
+        for c in cands {
+            for s in speeds {
+                e = Abs(a + corr * k * Sqrt(c[1]) / s - oneWay)
+                if minErr < 0 || e < minErr { minErr = e }
+            }
+        }
+        limit = minErr
+        if limit < tolerance / 2 { limit = tolerance / 2 }
+        pickSpeed = -1
+        picks = []
+        for s in speeds {
+            for c in cands {
+                e = Abs(a + corr * k * Sqrt(c[1]) / s - oneWay)
+                if e <= limit {
+                    if pickSpeed < 0 { pickSpeed = s }
+                    if s == pickSpeed { picks += [c] }
+                }
+            }
+            if pickSpeed >= 0 { break }
+        }
+        pick = picks[Random(0, len(picks) - 1)]
+        predicted = a + corr * k * Sqrt(pick[1]) / pickSpeed
+
+        // Real check on the picked route; every speed of one route costs one request at most
+        for s in speeds {
+            real, fuel = FlightTime(origin, pick[0], s, ships, COLONIZE)
+            if real <= 0 { continue }
+            e = Abs(2 * real - (returnAt - departAt))
+            if bestErr < 0 || e < bestErr || (e <= tolerance && bestErr <= tolerance && s < best[1]) {
+                best = [pick[0], s, real, fuel]
+                bestErr = e
+            }
+            if s == pickSpeed && predicted - a > 0 {
+                corr = corr * (real - a) / (predicted - a)
+            }
+        }
+        if bestErr >= 0 && bestErr <= tolerance {
+            break
+        }
+    }
+    return best
+}
+
+// Returns [result, line]: result is "sent", "skipped" or "failed", line the summary line
+func FleetSave(origin, returnAt) {
     // The Colonize mission needs at least one colony ship in the fleet
     ships, err = GetCachedCelestial(origin).GetShips()
     if err != nil {
         Notify("error", "" + origin + " could not read ships: " + err)
-        return "failed"
+        return ["failed", ""]
     }
     if ships.ColonyShip == 0 {
-        Notify("warn", "" + origin + " skipped: no colony ship on this moon")
-        return "skipped"
+        Notify("warn", "" + origin + " skipped: no colony ship here")
+        return ["skipped", ""]
     }
 
-    destination = NewCoordinate(origin.Galaxy, origin.System + systemOffset, 1, PLANET_TYPE)
+    Sleep(Random(1500, 4000))       // "checking the fleet screen"
+    plan = PlanRoute(origin, ships, returnAt)
+    if plan == nil {
+        return ["failed", ""]
+    }
+    dest = plan[0]
+    speed = plan[1]
+    oneWay = plan[2]
+
     fleet = NewFleet()
     fleet.SetOrigin(origin)
-    fleet.SetDestination(destination)
-    fleet.SetSpeed(fleetSpeed)
+    fleet.SetDestination(dest)
+    fleet.SetSpeed(speed)
     fleet.SetMission(COLONIZE)
     AddAllShips(fleet, ships)
     LoadAllResources(fleet, GetCachedCelestial(origin), ships)
     fleet, err = fleet.SendNow()
     if err != nil {
         Notify("error", "" + origin + " fleetsave failed: " + err)
-        return "failed"
+        return ["failed", ""]
     }
-    Notify("info", "" + origin + " ➡️ " + destination + " ::: Colonize")
-    return "sent"
+
+    backAt = GetTimestamp() + 2 * oneWay
+    line = "" + origin + " ➡️ " + dest + " @" + (speed * 10) + "% (" + ShortDur(oneWay) + " x2) | back " + HourText(backAt) + " (" + DiffText(backAt - returnAt) + ")"
+    if Abs(backAt - returnAt) > warnMinutes * 60 {
+        Notify("warn", "⚠️ " + line + " — no route lands closer")
+    } else {
+        Notify("info", line)
+    }
+    return ["sent", line]
 }
 
-Notify("report", "FleetSave On Colonize started")
+// Next return window: today if it is still at least 1h away, otherwise tomorrow
+year, month, day = Date()
+dayStart = Unix(0, 0).AddDate(year - 1970, month - 1, day - 1).Unix()
+windowStart = dayStart + returnFromHour * 3600 - timezoneOffsetHours * 3600
+if windowStart < GetTimestamp() + 3600 {
+    windowStart = windowStart + 24 * 3600
+}
+windowEnd = windowStart + (returnToHour - returnFromHour) * 3600
+returnTarget = Random(windowStart, windowEnd)
+
+origins = []
+if includeMoons {
+    for m in GetCachedMoons() {
+        origins += m.Coordinate
+    }
+}
+if includePlanets {
+    for p in GetCachedPlanets() {
+        origins += p.Coordinate
+    }
+}
+for i = len(origins) - 1; i > 0; i-- {
+    j = Random(0, i)
+    tmp = origins[i]
+    origins[i] = origins[j]
+    origins[j] = tmp
+}
+
+Notify("report", "🛡️ FleetSave On Colonize started: " + len(origins) + " origins, all back ~" + HourText(returnTarget) + " (+/-" + returnSpread + " min)")
 
 sent = 0
 failed = 0
 skipped = 0
-for moon in GetCachedMoons() {
-    result = FleetSaveFromMoon(moon)
+summary = []
+for origin in origins {
+    returnAt = returnTarget + Random(-returnSpread * 60, returnSpread * 60)
+    out = FleetSave(origin, returnAt)
+    result = out[0]
     if result == "sent" {
+        summary += out[1]
         sent = sent + 1
     } else if result == "failed" {
         failed = failed + 1
     } else {
         skipped = skipped + 1
     }
-    Sleep(Random(1000, 3000))
+    Sleep(Random(minDelay, maxDelay))
 }
 
-Notify("report", "FleetSave On Colonize done. Sent: " + sent + " | Skipped: " + skipped + " | Failed: " + failed)
+report = "🛡️ FleetSave On Colonize done. Sent: " + sent + " | Skipped: " + skipped + " | Failed: " + failed
+for line in summary {
+    report = report + "\n" + line
+}
+Notify("report", report)
