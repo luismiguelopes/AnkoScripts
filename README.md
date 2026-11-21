@@ -20,6 +20,7 @@ Every script is standalone. Open it, adjust the `SETTINGS` block at the top and 
   - `useRecall = true` cancels each fleet halfway so it flies home on its own; one return time is picked in the `returnFromHour`-`returnToHour` window and every fleet lands within `returnSpread` minutes of it
 - **`fleetsaveColonize.ank`** - Fleetsaves every moon with the Colonize mission (origins without a colony ship are skipped)
   - Picks the destination (systems/galaxies away) and the speed of each fleet so it lands back home at one common time in the `returnFromHour`-`returnToHour` window (+/- `returnSpread` min): the failed colonization sends the fleet straight back, so away time = 2 x one-way flight. Among routes within `toleranceMinutes` it takes the slowest (cheapest) speed
+  - Origins go in ascending coordinates. When the game refuses a destination (e.g. player in vacation mode), it tries the other `targetPositions` in that system, then the systems next to it, up to `maxDestinationTries`
 
 ### 🚚 Fleet and resource transfers
 

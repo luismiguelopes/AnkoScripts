@@ -6,7 +6,8 @@
 //   sessions of random size, so the ranges change from one day to the next.
 // - Before creating, it deletes the sessions it created the day before (those whose name starts
 //   with sessionPrefix). Sessions created by hand, or by an older version of this script, are not touched.
-// - Sessions run one at a time: the new ones go to the farmer's queue, in random order.
+// - Sessions run one at a time: the new ones go to the farmer's queue in ascending order
+//   (galaxy, then first system).
 // - The farmer is switched off while creating, so nothing raids until farmSchedule.ank (or
 //   startAfterCreate) starts it.
 
@@ -136,6 +137,11 @@ func SplitArea(galaxy, start, length, origin, fromMoon) {
     return chunks
 }
 
+// Sort key of a chunk: galaxy, then first system
+func ChunkKey(chunk) {
+    return chunk[0] * 1000 + chunk[1]
+}
+
 // Every session to create today, for every galaxy where you have a moon or a planet
 func PlanSessions() {
     moons = GetCachedMoons()
@@ -183,12 +189,15 @@ func PlanSessions() {
             chunks += SplitArea(g, prevCut + 1, length, origins[i][1], fromMoon)
         }
     }
-    // random order, so the queue is different every day
-    for i = len(chunks) - 1; i > 0; i-- {
-        j = Random(0, i)
-        tmp = chunks[i]
-        chunks[i] = chunks[j]
-        chunks[j] = tmp
+    // ascending coordinates: galaxy, then first system (insertion sort)
+    for i = 1; i < len(chunks); i++ {
+        j = i
+        for j > 0 && ChunkKey(chunks[j-1]) > ChunkKey(chunks[j]) {
+            tmp = chunks[j-1]
+            chunks[j-1] = chunks[j]
+            chunks[j] = tmp
+            j = j - 1
+        }
     }
     return chunks
 }

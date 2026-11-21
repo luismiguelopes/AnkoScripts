@@ -5,12 +5,15 @@
 // and the whole fleet flies straight back, so the trip home takes as long as the trip out.
 // The script picks, per moon, the destination (distance) and the speed so that every fleet
 // lands back home at one common time: away time = 2 x one-way flight.
+// Origins are sent in ascending coordinates.
 // ⚠️ The target slot must NOT be colonizable (occupied, or position 1/15 without Astrophysics 8),
 // otherwise the colony ship really colonizes it.
 
 includeMoons = true
 includePlanets = false
-targetPosition = 1              // planet position the fleets are sent to
+targetPositions = [1, 15]       // planet positions the fleets may be sent to (1 and 15 need Astrophysics 8 to colonize)
+maxDestinationTries = 6         // when a destination is refused (e.g. player in vacation mode), try this many others:
+                                // the other targetPositions in the same system first, then the systems next to it
 
 // Return time: one common time is picked at random between returnFromHour and returnToHour
 // (server time, the next window at least 1h away) and every fleet aims for it +/- returnSpread minutes.
@@ -171,15 +174,31 @@ func SpeedList() {
     return list
 }
 
+// Destinations refused by the game (vacation mode, ...), shared by every origin: "g:s:p" -> true
+badDestinations = {}
+
+func CoordKey(g, sys, pos) {
+    return "" + g + ":" + sys + ":" + pos
+}
+
+func IsUsable(origin, g, sys, pos) {
+    if g == origin.Galaxy && sys == origin.System && pos == origin.Position {
+        return false
+    }
+    return badDestinations[CoordKey(g, sys, pos)] != true
+}
+
 // Every destination the fleet may aim for, with its distance (Distance() makes no request)
 func Candidates(origin) {
     list = []
     for k = -maxSystemOffset; k <= maxSystemOffset; k++ {
-        if k == 0 && targetPosition == origin.Position {
-            continue
+        sys = Wrap(origin.System + k, numSystems)
+        for pos in targetPositions {
+            if IsUsable(origin, origin.Galaxy, sys, pos) {
+                dest = NewCoordinate(origin.Galaxy, sys, pos, PLANET_TYPE)
+                list += [[dest, Distance(origin, dest)]]
+            }
         }
-        dest = NewCoordinate(origin.Galaxy, Wrap(origin.System + k, numSystems), targetPosition, PLANET_TYPE)
-        list += [[dest, Distance(origin, dest)]]
     }
     if allowOtherGalaxies {
         for dg = 1; dg <= Floor(numGalaxies / 2); dg++ {
@@ -188,8 +207,49 @@ func Candidates(origin) {
                 if g == origin.Galaxy {
                     continue
                 }
-                dest = NewCoordinate(g, origin.System, targetPosition, PLANET_TYPE)
-                list += [[dest, Distance(origin, dest)]]
+                for pos in targetPositions {
+                    if IsUsable(origin, g, origin.System, pos) {
+                        dest = NewCoordinate(g, origin.System, pos, PLANET_TYPE)
+                        list += [[dest, Distance(origin, dest)]]
+                    }
+                }
+            }
+        }
+    }
+    return list
+}
+
+// Real FlightTime of one route at every speed (one request at most): the speed landing closest
+// to returnAt, the slowest one when several are within tolerance. [dest, speed, oneWaySecs, fuel, errSecs] or nil
+func BestSpeed(origin, dest, ships, returnAt) {
+    tolerance = toleranceMinutes * 60
+    away = returnAt - GetTimestamp() - departureLagSecs
+    best = nil
+    for s in SpeedList() {
+        real, fuel = FlightTime(origin, dest, s, ships, COLONIZE)
+        if real <= 0 { continue }
+        e = Abs(2 * real - away)
+        // speeds go slowest first: once one is within tolerance, keep it (cheapest)
+        if best == nil || (best[4] > tolerance && e < best[4]) {
+            best = [dest, s, real, fuel, e]
+        }
+    }
+    return best
+}
+
+// Replacements for a refused destination, nearest first: the other targetPositions in its system,
+// then the same positions in the systems next to it (+1, -1, +2, -2, ...). At most `count`.
+func Alternatives(origin, refused, count) {
+    list = []
+    for d = 0; d <= maxSystemOffset && len(list) < count; d++ {
+        offsets = [d, -d]
+        if d == 0 { offsets = [0] }
+        for off in offsets {
+            sys = Wrap(refused.System + off, numSystems)
+            for pos in targetPositions {
+                if len(list) < count && IsUsable(origin, refused.Galaxy, sys, pos) {
+                    list += NewCoordinate(refused.Galaxy, sys, pos, PLANET_TYPE)
+                }
             }
         }
     }
@@ -201,9 +261,9 @@ func Candidates(origin) {
 // (one request at most) give a and B; the model then ranks every candidate without requests.
 // The pick is checked with the real FlightTime and the model is corrected (up to 3 rounds),
 // because universes that skip empty systems shorten real distances.
-// Returns [dest, speed, oneWaySecs, fuel] or nil.
+// Returns [dest, speed, oneWaySecs, fuel, errSecs] or nil.
 func PlanRoute(origin, ships, returnAt) {
-    ref = NewCoordinate(origin.Galaxy, Wrap(origin.System + 1, numSystems), targetPosition, PLANET_TYPE)
+    ref = NewCoordinate(origin.Galaxy, Wrap(origin.System + 1, numSystems), targetPositions[0], PLANET_TYPE)
     t100, _ = FlightTime(origin, ref, HUNDRED_PERCENT, ships, COLONIZE)
     t10, _ = FlightTime(origin, ref, TEN_PERCENT, ships, COLONIZE)
     if t100 <= 0 || t10 <= t100 {
@@ -217,10 +277,13 @@ func PlanRoute(origin, ships, returnAt) {
 
     speeds = SpeedList()
     cands = Candidates(origin)
+    if len(cands) == 0 {
+        Notify("warn", "" + origin + ": no usable destination left")
+        return nil
+    }
     tolerance = toleranceMinutes * 60
     corr = 1.0
     best = nil
-    bestErr = -1
     for iter = 0; iter < 3; iter++ {
         departAt = GetTimestamp() + departureLagSecs
         oneWay = (returnAt - departAt) / 2
@@ -250,20 +313,16 @@ func PlanRoute(origin, ships, returnAt) {
         pick = picks[Random(0, len(picks) - 1)]
         predicted = a + corr * k * Sqrt(pick[1]) / pickSpeed
 
-        // Real check on the picked route; every speed of one route costs one request at most
-        for s in speeds {
-            real, fuel = FlightTime(origin, pick[0], s, ships, COLONIZE)
-            if real <= 0 { continue }
-            e = Abs(2 * real - (returnAt - departAt))
-            if bestErr < 0 || e < bestErr || (e <= tolerance && bestErr <= tolerance && s < best[1]) {
-                best = [pick[0], s, real, fuel]
-                bestErr = e
-            }
-            if s == pickSpeed && predicted - a > 0 {
-                corr = corr * (real - a) / (predicted - a)
-            }
+        // Real check on the picked route, then correct the model with it
+        r = BestSpeed(origin, pick[0], ships, returnAt)
+        if r != nil && (best == nil || r[4] < best[4]) {
+            best = r
         }
-        if bestErr >= 0 && bestErr <= tolerance {
+        real, _ = FlightTime(origin, pick[0], pickSpeed, ships, COLONIZE)
+        if real > 0 && predicted - a > 0 {
+            corr = corr * (real - a) / (predicted - a)
+        }
+        if best != nil && best[4] <= tolerance {
             break
         }
     }
@@ -288,21 +347,46 @@ func FleetSave(origin, returnAt) {
     if plan == nil {
         return ["failed", ""]
     }
-    dest = plan[0]
-    speed = plan[1]
-    oneWay = plan[2]
 
-    fleet = NewFleet()
-    fleet.SetOrigin(origin)
-    fleet.SetDestination(dest)
-    fleet.SetSpeed(speed)
-    fleet.SetMission(COLONIZE)
-    AddAllShips(fleet, ships)
-    LoadAllResources(fleet, GetCachedCelestial(origin), ships)
-    fleet, err = fleet.SendNow()
-    if err != nil {
-        Notify("error", "" + origin + " fleetsave failed: " + err)
-        return ["failed", ""]
+    // Send; if the game refuses the destination, mark it bad and try the nearest alternatives
+    alternatives = []
+    tries = 0
+    sentOk = false
+    for !sentOk {
+        dest = plan[0]
+        speed = plan[1]
+        oneWay = plan[2]
+        fleet = NewFleet()
+        fleet.SetOrigin(origin)
+        fleet.SetDestination(dest)
+        fleet.SetSpeed(speed)
+        fleet.SetMission(COLONIZE)
+        AddAllShips(fleet, ships)
+        LoadAllResources(fleet, GetCachedCelestial(origin), ships)
+        fleet, err = fleet.SendNow()
+        if err == nil {
+            sentOk = true
+            break
+        }
+        badDestinations[CoordKey(dest.Galaxy, dest.System, dest.Position)] = true
+        if tries == 0 {
+            alternatives = Alternatives(origin, dest, maxDestinationTries)
+        }
+        // next alternative that is still usable (another origin may have found it bad meanwhile)
+        plan = nil
+        for plan == nil && tries < len(alternatives) {
+            alt = alternatives[tries]
+            tries = tries + 1
+            if IsUsable(origin, alt.Galaxy, alt.System, alt.Position) {
+                plan = BestSpeed(origin, alt, ships, returnAt)
+            }
+        }
+        if plan == nil {
+            Notify("error", "" + origin + " fleetsave failed (" + tries + " other destinations tried): " + err)
+            return ["failed", ""]
+        }
+        Notify("info", "" + origin + " ➡️ " + dest + " refused (" + err + "), trying " + plan[0])
+        Sleep(Random(2000, 5000))
     }
 
     backAt = GetTimestamp() + 2 * oneWay
@@ -313,6 +397,10 @@ func FleetSave(origin, returnAt) {
         Notify("info", line)
     }
     return ["sent", line]
+}
+
+func OriginKey(c) {
+    return c.Galaxy * 100000 + c.System * 100 + c.Position
 }
 
 // Next return window: today if it is still at least 1h away, otherwise tomorrow
@@ -336,11 +424,15 @@ if includePlanets {
         origins += p.Coordinate
     }
 }
-for i = len(origins) - 1; i > 0; i-- {
-    j = Random(0, i)
-    tmp = origins[i]
-    origins[i] = origins[j]
-    origins[j] = tmp
+// ascending coordinates: galaxy, system, position (insertion sort; a moon stays before its planet)
+for i = 1; i < len(origins); i++ {
+    j = i
+    for j > 0 && OriginKey(origins[j-1]) > OriginKey(origins[j]) {
+        tmp = origins[j-1]
+        origins[j-1] = origins[j]
+        origins[j] = tmp
+        j = j - 1
+    }
 }
 
 Notify("report", "🛡️ FleetSave On Colonize started: " + len(origins) + " origins, all back ~" + HourText(returnTarget) + " (+/-" + returnSpread + " min)")
