@@ -18,17 +18,17 @@ Every script is standalone. Open it, adjust the `SETTINGS` block at the top and 
 - **`attackGuard.ank`** - Watches incoming attacks, fleetsaves the target shortly before impact and recalls the fleet afterwards
 - **`fleetsaveToMoons.ank`** - Parks all ships (and resources) from every planet/moon on random own moons 1-2 galaxies away (galaxies are circular) at 10%, with human-like timing
   - `useRecall = true` cancels each fleet halfway so it flies home on its own; one return time is picked in the `returnFromHour`-`returnToHour` window and every fleet lands within `returnSpread` minutes of it
-- **`nightFleetsave.ank`** - Sends one fleetsave and recalls it halfway so the fleet is back the next morning; refuses to send if the flight is too short to recall in time
-- **`fleetsaveColonize.ank`** - Fleetsaves every moon with the Colonize mission (moons without a colony ship are skipped)
+- **`fleetsaveColonize.ank`** - Fleetsaves every moon with the Colonize mission (origins without a colony ship are skipped)
+  - Picks the destination (systems/galaxies away) and the speed of each fleet so it lands back home at one common time in the `returnFromHour`-`returnToHour` window (+/- `returnSpread` min): the failed colonization sends the fleet straight back, so away time = 2 x one-way flight. Among routes within `toleranceMinutes` it takes the slowest (cheapest) speed
 
 ### 🚚 Fleet and resource transfers
 
 - **`homeworldToPlanets.ank`** - Sends a fixed number of Large Cargos from the homeworld to every planet
 - **`planetsToHomeworld.ank`** - Brings the Large Cargos from every planet back to the homeworld with all the resources they can carry
 - **`moonsToHomeworld.ank`** - Parks the extra Large/Small Cargos from every moon on the homeworld, keeping a set amount on each moon
-- **`moonsToPlanetsLC.ank`** - Sends the Large Cargos from every moon down to its planet
+- **`moonsToPlanets.ank`** - Sends all ships and resources from every moon down to its planet, leaving 1000 deuterium on the moon
 - **`planetsToMoons.ank`** - Sends all ships and resources from every planet up to its moon (planets without a moon are skipped)
-- **`repatriateNow.ank`** - Runs `moonsToPlanetsLC` and `planetsToMoons` in order, waits for the fleets to land, then calls the bot's repatriate
+- **`repatriateNow.ank`** - Runs `moonsToPlanets` and `planetsToMoons` in order, waits for the fleets to land, then calls the bot's repatriate
 - **`resourceCollector.ank`** - Periodically transports resources from planets above a threshold to the homeworld
 - **`fleetBalancer.ank`** - Moves surplus ships so every planet reaches a target amount per ship type
 - **`jumpGate.ank`** - Moves ships between moons through jump gates in pairs, leftovers to the home moon, every 30-45 min
@@ -46,7 +46,6 @@ Every script is standalone. Open it, adjust the `SETTINGS` block at the top and 
 - **`createFarmSessions.ank`** - Every day, replaces its farm sessions with new ones: each moon gets the systems closest to it (circular galaxy, no overlap), with borders moved a little and split into random-sized sessions
 - **`expeditionManager.ank`** - Keeps expedition slots busy, rotating origins and always leaving some fleet slots free
 - **`debrisHarvester.ank`** - Scans galaxies for expedition debris and sends pathfinders from the nearest planet/moon
-- **`scanExpeditionDebris.ank`** - Scans one galaxy and reports large expedition debris fields (no fleets sent)
 - **`bidAuction.ank`** - Bids on the auctioneer up to a maximum, never against your own alliance
 
 ### 📊 Reporting and session
@@ -73,8 +72,7 @@ Every script is standalone. Open it, adjust the `SETTINGS` block at the top and 
 
 Settings you must fill in before the first run:
 
-- `nightFleetsave.ank`: `sendTo` (the script refuses to run without it)
-- `timezoneOffsetHours` (server time minus UTC) in `nightFleetsave`, `farmSchedule`, `dailyReport` and `fleetsaveToMoons`
+- `timezoneOffsetHours` (server time minus UTC) in `farmSchedule`, `dailyReport` and `fleetsaveToMoons`
 - `resourceCollector.ank`: `lcCapacity` for your Hyperspace Technology level
 - `buildDef.ank`: one entry in `factors` per planet, in the in-game order
 - Coordinates and origins in `ipmAttack` and `expeditionManager`

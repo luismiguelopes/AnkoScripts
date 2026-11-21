@@ -40,7 +40,13 @@ func Notify(level, msg) {
 func Work(min, max) {
     minutes = Random(min, max)
     Notify("info", "Working for " + minutes + " min")
-    ResumeFarmingBot()
+    // Kepler: ResumeFarmingBot only works on a paused campaign. In the morning createFarmSessions has
+    // left the farmer off with a fresh queue, so StartFarmingBot is what starts it.
+    if IsPausedFarmingBot() {
+        ResumeFarmingBot()
+    } else {
+        StartFarmingBot()
+    }
     Sleep(minutes * 60 * 1000)
 }
 

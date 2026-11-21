@@ -7,6 +7,8 @@
 // - Before creating, it deletes the sessions it created the day before (those whose name starts
 //   with sessionPrefix). Sessions created by hand, or by an older version of this script, are not touched.
 // - Sessions run one at a time: the new ones go to the farmer's queue, in random order.
+// - The farmer is switched off while creating, so nothing raids until farmSchedule.ank (or
+//   startAfterCreate) starts it.
 
 //////////////////////////////////////
 // SETTINGS
@@ -18,7 +20,8 @@ maxChunk = 80                   // largest session, in systems
 borderJitter = 12               // the border between two origins moves up to +/- this many systems
 
 repeatDaily = true              // false = create once and stop
-createHour = 6                  // server time; recreate every day between createHour and +60 min
+createHour = 5                  // server time; recreate every day between createHour and +60 min (before farmSchedule wakeUpHour)
+startAfterCreate = false        // false = leave the farmer off, farmSchedule.ank starts it; true = start farming right away
 timezoneOffsetHours = 1         // server time minus UTC
 
 // Settings of every session
@@ -231,6 +234,11 @@ func CreateSession(chunk) {
     s.SetMinimumStorageToIgnore(5, 5, 5)
     s.SetMinimumPlayerRank(minimumPlayerRank)
     s.SetEspionageProbeRaids(false)
+    // Raid ships: pathfinders first, then small cargos when they run short, then large cargos
+    // (a raid never mixes two types)
+    s.SetUsePathfinders(true)
+    s.SetSmallCargosFirst(false)
+    s.SetBackupCargos(SMALLCARGO, LARGECARGO)
     // Probes and raids leave from the origin of this session, never from the nearest celestial
     // (in Kepler both flags are the same mode, so both are set to false)
     s.SetAttackFromNearestPlanet(false)
@@ -250,26 +258,81 @@ func CreateSession(chunk) {
     session, err = s.BuildFarmSession()
     if err != nil {
         Notify("error", "Farm session " + name + " failed: " + err)
-        return false
+        return ""
     }
     Notify("info", "Farm session " + session.ID + ": " + name + " from " + origin.GetCoordinate())
-    return true
+    return session.ID
+}
+
+// In practice BuildFarmSession() switches the farmer on when nothing is running (the docs say it
+// should not), so switch it straight back off. The campaign it was running goes back to rest.
+func KeepFarmerOff() {
+    if IsRunningFarmingBot() {
+        StopFarmingBot()
+        Notify("info", "Farmer switched back off")
+    }
+}
+
+// State of a campaign by ID ("active", "paused", "queued", "idle"), "" if not found
+func SessionState(id) {
+    for s in GetFarmSessions() {
+        if s.ID == id {
+            return s.State
+        }
+    }
+    return ""
 }
 
 func CreateAll() {
+    // A new session only raids if the farmer is on, so switch it off first. StopAllFarmSessions also
+    // empties the queue and drops any paused progress; campaigns stay in the list (ours are deleted next).
+    StopFarmingBot()
+    StopAllFarmSessions()
+    Sleep(Random(2000, 5000))
     deleted = DeleteOldSessions()
     chunks = PlanSessions()
-    created = 0
+    ids = []
     failed = 0
     for chunk in chunks {
-        if CreateSession(chunk) {
-            created = created + 1
+        id = CreateSession(chunk)
+        KeepFarmerOff()
+        if id != "" {
+            ids += [id]
         } else {
             failed = failed + 1
         }
         Sleep(Random(2000, 6000))
     }
-    Notify("report", "🌾 Farm sessions: " + deleted + " deleted, " + created + " created, " + failed + " failed")
+    created = len(ids)
+
+    // The campaigns that were switched back off are at rest, not in the queue: put them back in line.
+    // The farmer is off, so they wait for the next StartFarmingBot().
+    requeued = 0
+    for id in ids {
+        if SessionState(id) == "idle" {
+            QueueFarmSession(id)
+            KeepFarmerOff()
+            requeued = requeued + 1
+            Sleep(Random(500, 1500))
+        }
+    }
+    queued = 0
+    for id in ids {
+        state = SessionState(id)
+        if state == "queued" || state == "active" {
+            queued = queued + 1
+        }
+    }
+    Notify("info", "Re-queued " + requeued + " campaigns that the farmer had started")
+
+    msg = "🌾 Farm sessions: " + deleted + " deleted, " + created + " created (" + queued + " waiting), " + failed + " failed"
+    if startAfterCreate && created > 0 {
+        StartFarmingBot()
+        msg = msg + " | farming started"
+    } else {
+        msg = msg + " | farmer off, waiting for farmSchedule"
+    }
+    Notify("report", msg)
 }
 
 // Sleeps until tomorrow at createHour (plus up to 60 random minutes)

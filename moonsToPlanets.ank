@@ -1,14 +1,10 @@
 //////////////////////////////////////
 // SETTINGS
 
-sendFrom = GetHomeWorld()                   // planet/moon to fleetsave from (or "M:1:2:3")
-sendTo = NewCoordinate(4, 278, 8, MOON_TYPE) // EDIT: fleetsave target
-fleetSpeed = TEN_PERCENT                    // TEN_PERCENT ... HUNDRED_PERCENT
+// Sends all ships and all resources from each moon down to its planet (Park),
+// leaving only keepDeuterium on the moon
 
-// The fleet is back home at a random time between these hours tomorrow
-returnFromHour = 10
-returnToHour = 11
-timezoneOffsetHours = 1                     // server time minus UTC (was the old "- 3600")
+keepDeuterium = 1000   // deuterium that stays on each moon
 
 //////////////////////////////////////
 // COMMON (same block in every script)
@@ -37,6 +33,9 @@ func Notify(level, msg) {
         }
     }
 }
+
+//////////////////////////////////////
+// MAIN
 
 // Count of one ship type in a ShipsInfos
 func ShipCount(allShips, shipType) {
@@ -71,9 +70,10 @@ func AddAllShips(fleet, ships) {
 // Loads as much as the cargo holds: deuterium first, then crystal, then metal.
 // Replaces SetAllResources(), which left the fleets empty. Call it after the ships are added.
 // The flight's fuel stays on the celestial and its space is kept free in the cargo.
+// keepDeut: deuterium left on the celestial after the fleet leaves (on top of the fuel).
 // ships: a ShipsInfos with exactly the ships in the fleet (Cargo() does not accept the fleet builder).
 // Returns the total loaded (0 on error, the fleet still leaves with its ships).
-func LoadAllResources(fleet, celestial, ships) {
+func LoadAllResources(fleet, celestial, ships, keepDeut) {
     res, err = celestial.GetResources()
     if err != nil {
         Notify("warn", "" + celestial.GetCoordinate() + ": could not read resources, fleet leaves empty: " + err)
@@ -89,7 +89,7 @@ func LoadAllResources(fleet, celestial, ships) {
         return 0
     }
     if space < 0 { space = 0 }
-    d = res.Deuterium - fuel
+    d = res.Deuterium - fuel - keepDeut
     if d < 0 { d = 0 }
     if d > space { d = space }
     space = space - d
@@ -102,80 +102,57 @@ func LoadAllResources(fleet, celestial, ships) {
     return Floor(m) + Floor(c) + Floor(d)
 }
 
-func Pad2(n) {
-    if n < 10 {
-        return "0" + n
+
+Notify("report", "🚀 Moons ➡️ Planets started")
+
+// Simulate initial planning time
+Sleep(Random(3000, 7000))
+
+sent = 0
+failed = 0
+for moon in GetCachedMoons() {
+    origin = moon.Coordinate
+    destination = NewCoordinate(origin.Galaxy, origin.System, origin.Position, PLANET_TYPE)
+
+    Sleep(Random(1500, 3000))  // Human analysis time
+
+    celestial = GetCachedCelestial(origin)
+    ships, err = celestial.GetShips()
+    if err != nil {
+        failed = failed + 1
+        Notify("error", "🌙 " + origin + " could not read ships: " + err)
+        continue
     }
-    return "" + n
+    if ships.CountShips() == 0 {
+        Notify("info", "No ships on " + origin + ", skipping")
+        continue
+    }
+
+    fleet = NewFleet()
+    fleet.SetOrigin(origin)
+    fleet.SetDestination(destination)
+    fleet.SetMission(PARK)
+    AddAllShips(fleet, ships)
+    loaded = LoadAllResources(fleet, celestial, ships, keepDeuterium)
+
+    Sleep(Random(2000, 4000))  // Decision delay
+
+    fleet, err = fleet.SendNow()
+
+    if err != nil {
+        failed = failed + 1
+        Notify("error", "🌙 " + origin + " ➡️ 🪐 " + destination + " failed: " + err)
+        Sleep(Random(1000, 2000))
+    } else {
+        sent = sent + 1
+        Notify("info", "🌙 " + origin + " ➡️ 🪐 " + destination + " ::: all ships + " + loaded + " resources")
+        Sleep(Random(8000, 18000))  // Human delay after sending
+    }
+
+    // Random block delay
+    if Random(1, 100) > 85 {
+        Sleep(Random(10000, 25000))
+    }
 }
 
-// Timestamp for a date at midnight (UTC) plus secondsInDay
-func UnixFromDate(y, m, d, secondsInDay) {
-    t = Unix(0, 0).AddDate(y - 1970, m - 1, d - 1)
-    return t.Unix() + secondsInDay
-}
-
-if sendTo.Galaxy == 0 {
-    Notify("error", "nightFleetsave: set sendTo in the settings first")
-    return
-}
-origin = GetCachedCelestial(sendFrom)
-if origin == nil {
-    Notify("error", "nightFleetsave: " + sendFrom + " is not one of your planets/moons")
-    return
-}
-
-// Pick the return time tomorrow
-returnSecondOfDay = Random(returnFromHour * 3600, returnToHour * 3600)
-year, month, day = Date()
-now = GetTimestamp()
-returnTimestamp = UnixFromDate(year, month, day + 1, returnSecondOfDay) - timezoneOffsetHours * 3600
-delta = returnTimestamp - now
-
-// Outbound until cancel + same time back = delta, so cancel halfway
-waitBeforeCancel = Floor(delta / 2)
-
-// The fleet must still be in the air when we cancel, or it lands at the target
-ships, err = origin.GetShips()
-if err != nil {
-    Notify("error", "nightFleetsave: could not read ships: " + err)
-    return
-}
-oneWaySecs, _ = FlightTime(origin.GetCoordinate(), sendTo, fleetSpeed, ships, PARK, 0)
-if oneWaySecs <= waitBeforeCancel + 300 {
-    Notify("error", "nightFleetsave aborted: one-way flight is " + ShortDur(oneWaySecs) + " but the cancel happens after " + ShortDur(waitBeforeCancel) + ". Pick a farther target or a slower speed.")
-    return
-}
-
-returnText = Pad2(Floor(returnSecondOfDay / 3600)) + ":" + Pad2(Floor((returnSecondOfDay % 3600) / 60))
-Notify("info", "Total fleetsave: " + ShortDur(delta) + " | Cancel in: " + ShortDur(waitBeforeCancel) + " | One-way flight: " + ShortDur(oneWaySecs))
-
-fleet = NewFleet()
-fleet.SetOrigin(origin)
-fleet.SetDestination(sendTo)
-fleet.SetSpeed(fleetSpeed)
-fleet.SetMission(PARK)
-AddAllShips(fleet, ships)
-LoadAllResources(fleet, origin, ships)
-fleet, err = fleet.SendNow()
-if err != nil {
-    Notify("error", "Error sending fleetsave: " + err)
-    return
-}
-Notify("report", "🚀 FleetSave sent from " + origin.GetCoordinate() + ". Back tomorrow around " + returnText + ". Cancel in " + ShortDur(waitBeforeCancel))
-
-Sleep(waitBeforeCancel * 1000)
-
-err = CancelFleet(fleet.ID)
-if err != nil {
-    Notify("error", "Could not cancel the fleetsave: " + err + ". Check the fleet manually!")
-    return
-}
-Notify("report", "🛑 Fleet canceled. Back tomorrow around " + returnText)
-
-// Log out while the fleet returns (human-like)
-Sleep(Random(3000, 8000))
-Logout()
-Sleep(Random(waitBeforeCancel * 800, waitBeforeCancel * 900))
-Login()
-Notify("report", "✅ Logged in again. I'm back.")
+Notify("report", "🏁 Moons ➡️ Planets done. Sent: " + sent + " | Failed: " + failed)
