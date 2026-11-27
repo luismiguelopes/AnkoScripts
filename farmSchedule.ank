@@ -1,10 +1,35 @@
 //////////////////////////////////////
 // SETTINGS
+// Times are server time, written [hour, minute]. Every day picks its own times inside these ranges.
 
-wakeUpHour = 7                  // server time; the day starts between wakeUpHour and +30 min
-timezoneOffsetHours = 1         // server time minus UTC
-workCyclesBeforeLunch = 4
-workCyclesAfterLunch = 4
+timezoneOffsetHours = 1             // server time minus UTC
+
+// --- Weekdays (remote work, laptop always next to me) ---
+startFrom = [7, 30]                 // first look at the game between startFrom and startTo
+startTo = [8, 15]
+lunchFrom = [12, 30]                // lunch starts between lunchFrom and lunchTo
+lunchTo = [13, 15]
+lunchMinutes = [45, 75]
+endFrom = [17, 30]                  // farmer stops for the night between endFrom and endTo (fleetsave is done apart)
+endTo = [18, 30]
+workMinutes = [20, 40]              // farming stretch
+breakMinutes = [5, 25]              // short break between stretches
+longBreakChance = 33                // % of weekdays with one long break (meeting, errand)
+longBreakMinutes = [60, 120]
+dayOffChance = 4                    // % of weekdays played like a weekend day (day off)
+
+// --- Weekends (uncertain, fewer and longer gaps) ---
+quietDayChance = 40                 // % of weekend days with almost no play
+weekendStartFrom = [9, 0]
+weekendStartTo = [11, 0]
+weekendEndFrom = [17, 30]
+weekendEndTo = [19, 0]
+weekendWorkMinutes = [20, 50]
+weekendBreakMinutes = [60, 180]
+quietSessions = [1, 2]              // quiet day: only this many short looks...
+quietWorkMinutes = [10, 25]
+quietFrom = [10, 0]                 // ...somewhere in this window
+quietTo = [18, 0]
 
 //////////////////////////////////////
 // COMMON (same block in every script)
@@ -37,9 +62,71 @@ func Notify(level, msg) {
 //////////////////////////////////////
 // MAIN
 
-func Work(min, max) {
-    minutes = Random(min, max)
-    Notify("info", "Working for " + minutes + " min")
+workedSecs = 0          // farming time of the current day
+longBreakAt = 0         // second of the day after which the long break happens (0 = none today)
+
+// Integer division (/ always returns a float)
+func IntDiv(a, b) {
+    q = 0
+    for (q + 1) * b <= a {
+        q = q + 1
+    }
+    return q
+}
+
+func ServerSecs() {
+    return GetTimestamp() + timezoneOffsetHours * 3600
+}
+
+// Seconds since server midnight
+func SecOfDay() {
+    return ServerSecs() % 86400
+}
+
+// 0 = Sunday ... 6 = Saturday (1 Jan 1970 was a Thursday)
+func DayOfWeek() {
+    s = ServerSecs()
+    return (IntDiv(s, 86400) + 4) % 7
+}
+
+func At(hm) {
+    return hm[0] * 3600 + hm[1] * 60
+}
+
+func RandomAt(from, to) {
+    return Random(At(from), At(to))
+}
+
+func Hhmm(sec) {
+    h = IntDiv(sec, 3600)
+    m = IntDiv(sec % 3600, 60)
+    text = "" + h + ":"
+    if m < 10 {
+        text = text + "0"
+    }
+    return text + m
+}
+
+func SleepSecs(secs) {
+    if secs > 0 {
+        Sleep(secs * 1000)
+    }
+}
+
+func WaitUntil(sec) {
+    SleepSecs(sec - SecOfDay())
+}
+
+// Farms for a random stretch, never past maxSecs
+func Work(minutes, maxSecs) {
+    secs = Random(minutes[0], minutes[1]) * 60
+    if secs > maxSecs {
+        secs = maxSecs
+    }
+    if secs <= 0 {
+        return
+    }
+    Notify("info", "Farming for " + ShortDur(secs))
     // Kepler: ResumeFarmingBot only works on a paused campaign. In the morning createFarmSessions has
     // left the farmer off with a fresh queue, so StartFarmingBot is what starts it.
     if IsPausedFarmingBot() {
@@ -47,48 +134,128 @@ func Work(min, max) {
     } else {
         StartFarmingBot()
     }
-    Sleep(minutes * 60 * 1000)
+    Sleep(secs * 1000)
+    workedSecs = workedSecs + secs
 }
 
-func Pause(label, min, max) {
-    minutes = Random(min, max)
-    Notify("info", label + " for " + minutes + " min")
+// Pauses the farmer for a random time, never past maxSecs
+func Pause(label, minutes, maxSecs) {
+    secs = Random(minutes[0], minutes[1]) * 60
+    if secs > maxSecs {
+        secs = maxSecs
+    }
+    if secs <= 0 {
+        return
+    }
+    Notify("info", label + " for " + ShortDur(secs))
     PauseFarmingBot()
-    Sleep(minutes * 60 * 1000)
-}
-
-// Sleeps until tomorrow at wakeUpHour (plus up to 30 random minutes)
-func SleepUntilMorning() {
-    year, month, day = Date()
-    t = Unix(0, 0).AddDate(year - 1970, month - 1, day)    // tomorrow 00:00 UTC
-    wakeAt = t.Unix() + wakeUpHour * 3600 + Random(0, 1800) - timezoneOffsetHours * 3600
-    secs = wakeAt - GetTimestamp()
-    Notify("report", "😴 Day finished, farming paused. Waking up in " + ShortDur(secs))
     Sleep(secs * 1000)
 }
 
+// Farming stretches and breaks until the clock reaches `until`
+func Cycles(until, work, brk) {
+    for until - SecOfDay() >= 10 * 60 {
+        Work(work, until - SecOfDay())
+        if until - SecOfDay() < 10 * 60 {
+            break
+        }
+        if longBreakAt > 0 && SecOfDay() >= longBreakAt {
+            longBreakAt = 0
+            Pause("Long break", longBreakMinutes, until - SecOfDay())
+        } else {
+            Pause("Break", brk, until - SecOfDay())
+        }
+    }
+}
+
+func WorkDay() {
+    start = RandomAt(startFrom, startTo)
+    lunch = RandomAt(lunchFrom, lunchTo)
+    end = RandomAt(endFrom, endTo)
+    if SecOfDay() >= end {
+        Notify("report", "⏭️ Started after today's end (" + Hhmm(end) + "), waiting for tomorrow")
+        return false
+    }
+    plan = "farming " + Hhmm(start) + "–" + Hhmm(end) + ", lunch " + Hhmm(lunch)
+    if Random(1, 100) <= longBreakChance {
+        longBreakAt = Random(start + 3600, end - 2 * 3600)
+        plan = plan + ", long break after " + Hhmm(longBreakAt)
+    }
+    WaitUntil(start)
+    Notify("report", "☀️ Weekday: " + plan)
+
+    Cycles(lunch, workMinutes, breakMinutes)
+    // Lunch, unless the script was started well after it
+    if SecOfDay() < lunch + 30 * 60 {
+        PauseFarmingBot()
+        WaitUntil(lunch)
+        Pause("Lunch", lunchMinutes, end - SecOfDay())
+    }
+    Cycles(end, workMinutes, breakMinutes)
+    return true
+}
+
+func WeekendDay(label) {
+    if Random(1, 100) <= quietDayChance {
+        return QuietDay(label)
+    }
+    start = RandomAt(weekendStartFrom, weekendStartTo)
+    end = RandomAt(weekendEndFrom, weekendEndTo)
+    if SecOfDay() >= end {
+        Notify("report", "⏭️ Started after today's end (" + Hhmm(end) + "), waiting for tomorrow")
+        return false
+    }
+    WaitUntil(start)
+    Notify("report", "☀️ " + label + ": farming " + Hhmm(start) + "–" + Hhmm(end) + " with long gaps")
+    Cycles(end, weekendWorkMinutes, weekendBreakMinutes)
+    return true
+}
+
+// A few short looks spread over the window: the window is cut in equal slots, one look in each
+func QuietDay(label) {
+    n = Random(quietSessions[0], quietSessions[1])
+    from = At(quietFrom)
+    to = At(quietTo)
+    if SecOfDay() >= to {
+        Notify("report", "⏭️ Started after today's end (" + Hhmm(to) + "), waiting for tomorrow")
+        return false
+    }
+    Notify("report", "🛋️ " + label + ": quiet day, " + n + " short look(s) between " + Hhmm(from) + " and " + Hhmm(to))
+    slot = IntDiv(to - from, n)
+    for i = 0; i < n; i++ {
+        slotEnd = from + (i + 1) * slot
+        at = Random(from + i * slot, slotEnd - quietWorkMinutes[1] * 60)
+        if SecOfDay() > at {
+            continue
+        }
+        WaitUntil(at)
+        Work(quietWorkMinutes, slotEnd - SecOfDay())
+        PauseFarmingBot()
+    }
+    return true
+}
+
+dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+Notify("report", "▶️ farmSchedule started: server time " + Hhmm(SecOfDay()) + ", " + dayNames[DayOfWeek()] + ". Farming starts at today's start time")
+
 for {
-    // --- Start of the day ---
-    Notify("report", "☀️ Day started")
-    Work(20, 40)                            // farm a bit after waking up
-    Pause("Going to work", 21, 30)
-
-    // --- Work cycles before lunch ---
-    for i = 0; i < workCyclesBeforeLunch; i++ {
-        Work(22, 40)
-        Pause("Break", 5, 20)
+    workedSecs = 0
+    longBreakAt = 0
+    dow = DayOfWeek()
+    played = false
+    if dow == 0 || dow == 6 {
+        played = WeekendDay("Weekend")
+    } else if Random(1, 100) <= dayOffChance {
+        played = WeekendDay("Day off")
+    } else {
+        played = WorkDay()
     }
 
-    // --- Lunch break ---
-    Pause("Lunch", 50, 75)
-
-    // --- Work cycles after lunch ---
-    for i = 0; i < workCyclesAfterLunch; i++ {
-        Work(15, 40)
-        Pause("Break", 5, 25)
-    }
-
-    // --- Night ---
+    // --- Night: farmer paused until tomorrow ---
     PauseFarmingBot()
-    SleepUntilMorning()
+    if played {
+        Notify("report", "😴 Day finished at " + Hhmm(SecOfDay()) + ", farmed " + ShortDur(workedSecs) + ". Farming paused until tomorrow")
+    }
+    // Wake a few minutes after midnight; the next day then waits for its own start time
+    SleepSecs(86400 - SecOfDay() + Random(60, 600))
 }
