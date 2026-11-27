@@ -31,6 +31,21 @@ quietWorkMinutes = [10, 25]
 quietFrom = [10, 0]                 // ...somewhere in this window
 quietTo = [18, 0]
 
+// --- How much a person would farm ---
+// Caps picked every day; the day ends early when either is reached.
+attacksPerWeekday = [80, 150]
+attacksPerWeekendDay = [30, 80]
+spiesPerWeekday = [200, 400]
+spiesPerWeekendDay = [80, 200]
+// A farming stretch ends early once it has sent this many raids or espionages
+attacksPerStretch = [8, 25]
+spiesPerStretch = [20, 60]
+// While farming, every few minutes: raids are counted in the fleet movements (1 request; keep the
+// max below the quickest raid round trip, or raids are missed) and espionages from the new
+// espionage reports in the message box (probes come back too fast to be seen in the air).
+checkEveryMinutes = [4, 8]
+reportPages = [2, 6, 12]            // pages of reports read per check: more only when they are all new
+
 //////////////////////////////////////
 // COMMON (same block in every script)
 
@@ -64,6 +79,13 @@ func Notify(level, msg) {
 
 workedSecs = 0          // farming time of the current day
 longBreakAt = 0         // second of the day after which the long break happens (0 = none today)
+dayAttacks = 0          // raids seen today
+dayCap = 0              // today's raid cap
+seenFleets = {}         // fleet IDs already counted today
+daySpies = 0            // espionage reports seen today
+daySpyCap = 0           // today's espionage cap
+seenReports = {}        // espionage report IDs already seen
+reportsReady = false    // false until the reports already in the box were marked as seen
 
 // Integer division (/ always returns a float)
 func IntDiv(a, b) {
@@ -117,16 +139,107 @@ func WaitUntil(sec) {
     SleepSecs(sec - SecOfDay())
 }
 
-// Farms for a random stretch, never past maxSecs
+func CapReached() {
+    return dayAttacks >= dayCap || daySpies >= daySpyCap
+}
+
+func PickCaps(weekend) {
+    if weekend {
+        dayCap = Random(attacksPerWeekendDay[0], attacksPerWeekendDay[1])
+        daySpyCap = Random(spiesPerWeekendDay[0], spiesPerWeekendDay[1])
+    } else {
+        dayCap = Random(attacksPerWeekday[0], attacksPerWeekday[1])
+        daySpyCap = Random(spiesPerWeekday[0], spiesPerWeekday[1])
+    }
+    return "up to " + dayCap + " raids / " + daySpyCap + " espionages"
+}
+
+// Reads the espionage reports (newest first), a few pages first and more only when they are all
+// new. Returns how many were not seen yet (and marks them as seen). baseline: first page only.
+func CountNewReports(baseline) {
+    found = 0
+    steps = reportPages
+    if baseline {
+        steps = [reportPages[0]]
+    }
+    thisCall = {}       // reports first seen during this call (a bigger read repeats the first pages)
+    for pages in steps {
+        reports, err = GetEspionageReportMessagesPages(pages)
+        if err != nil {
+            Notify("info", "Could not read the espionage reports: " + err)
+            return found
+        }
+        known = false   // reached a report from an earlier check: nothing older is new
+        for r in reports {
+            key = "" + r.ID
+            if thisCall[key] != nil {
+                continue
+            }
+            if seenReports[key] != nil {
+                known = true
+                continue
+            }
+            seenReports[key] = true
+            thisCall[key] = true
+            found = found + 1
+        }
+        if known || len(reports) == 0 || baseline {
+            return found
+        }
+        Sleep(Random(1000, 3000))
+    }
+    Notify("info", "More than " + reportPages[len(reportPages) - 1] + " pages of new espionage reports, some were not counted")
+    return found
+}
+
+// Espionages since the last check; the first call of the day only marks what is already in the box
+func CountNewSpies() {
+    if !reportsReady {
+        CountNewReports(true)
+        reportsReady = true
+        return 0
+    }
+    n = CountNewReports(false)
+    daySpies = daySpies + n
+    return n
+}
+
+// Counts the raids in the air that were not seen yet; returns how many are new.
+// Espionages are not counted: probes come back within seconds, between two checks.
+func CountNewFlights() {
+    newAttacks = 0
+    flights, _ = GetFleets()
+    for f in flights {
+        if f.Mission != ATTACK {
+            continue
+        }
+        key = "" + f.ID
+        if seenFleets[key] != nil {
+            continue
+        }
+        seenFleets[key] = true
+        dayAttacks = dayAttacks + 1
+        newAttacks = newAttacks + 1
+    }
+    return newAttacks
+}
+
+// Farms for a random stretch, never past maxSecs. Stops early once the stretch sent
+// enough raids or the day's cap is reached.
 func Work(minutes, maxSecs) {
     secs = Random(minutes[0], minutes[1]) * 60
     if secs > maxSecs {
         secs = maxSecs
     }
-    if secs <= 0 {
+    if secs <= 0 || CapReached() {
         return
     }
-    Notify("info", "Farming for " + ShortDur(secs))
+    stretchCap = Random(attacksPerStretch[0], attacksPerStretch[1])
+    stretchSpyCap = Random(spiesPerStretch[0], spiesPerStretch[1])
+    Notify("info", "Farming for " + ShortDur(secs) + " (at most " + stretchCap + " raids / " + stretchSpyCap + " espionages)")
+    if !reportsReady {
+        CountNewSpies()
+    }
     // Kepler: ResumeFarmingBot only works on a paused campaign. In the morning createFarmSessions has
     // left the farmer off with a fresh queue, so StartFarmingBot is what starts it.
     if IsPausedFarmingBot() {
@@ -134,8 +247,29 @@ func Work(minutes, maxSecs) {
     } else {
         StartFarmingBot()
     }
-    Sleep(secs * 1000)
-    workedSecs = workedSecs + secs
+    began = GetTimestamp()
+    endAt = began + secs
+    stretchAttacks = 0
+    stretchSpies = 0
+    for GetTimestamp() < endAt {
+        wait = Random(checkEveryMinutes[0] * 60, checkEveryMinutes[1] * 60)
+        if wait > endAt - GetTimestamp() {
+            wait = endAt - GetTimestamp()
+        }
+        SleepSecs(wait)
+        stretchAttacks = stretchAttacks + CountNewFlights()
+        stretchSpies = stretchSpies + CountNewSpies()
+        if CapReached() {
+            Notify("info", "Daily cap reached: " + dayAttacks + "/" + dayCap + " raids, " + daySpies + "/" + daySpyCap + " espionages")
+            break
+        }
+        if stretchAttacks >= stretchCap || stretchSpies >= stretchSpyCap {
+            Notify("info", "Enough for this stretch (" + stretchAttacks + " raids, " + stretchSpies + " espionages)")
+            break
+        }
+    }
+    PauseFarmingBot()
+    workedSecs = workedSecs + GetTimestamp() - began
 }
 
 // Pauses the farmer for a random time, never past maxSecs
@@ -154,9 +288,9 @@ func Pause(label, minutes, maxSecs) {
 
 // Farming stretches and breaks until the clock reaches `until`
 func Cycles(until, work, brk) {
-    for until - SecOfDay() >= 10 * 60 {
+    for until - SecOfDay() >= 10 * 60 && !CapReached() {
         Work(work, until - SecOfDay())
-        if until - SecOfDay() < 10 * 60 {
+        if until - SecOfDay() < 10 * 60 || CapReached() {
             break
         }
         if longBreakAt > 0 && SecOfDay() >= longBreakAt {
@@ -176,7 +310,7 @@ func WorkDay() {
         Notify("report", "⏭️ Started after today's end (" + Hhmm(end) + "), waiting for tomorrow")
         return false
     }
-    plan = "farming " + Hhmm(start) + "–" + Hhmm(end) + ", lunch " + Hhmm(lunch)
+    plan = "farming " + Hhmm(start) + "–" + Hhmm(end) + ", lunch " + Hhmm(lunch) + ", " + PickCaps(false)
     if Random(1, 100) <= longBreakChance {
         longBreakAt = Random(start + 3600, end - 2 * 3600)
         plan = plan + ", long break after " + Hhmm(longBreakAt)
@@ -186,7 +320,7 @@ func WorkDay() {
 
     Cycles(lunch, workMinutes, breakMinutes)
     // Lunch, unless the script was started well after it
-    if SecOfDay() < lunch + 30 * 60 {
+    if SecOfDay() < lunch + 30 * 60 && !CapReached() {
         PauseFarmingBot()
         WaitUntil(lunch)
         Pause("Lunch", lunchMinutes, end - SecOfDay())
@@ -205,8 +339,9 @@ func WeekendDay(label) {
         Notify("report", "⏭️ Started after today's end (" + Hhmm(end) + "), waiting for tomorrow")
         return false
     }
+    caps = PickCaps(true)
     WaitUntil(start)
-    Notify("report", "☀️ " + label + ": farming " + Hhmm(start) + "–" + Hhmm(end) + " with long gaps")
+    Notify("report", "☀️ " + label + ": farming " + Hhmm(start) + "–" + Hhmm(end) + " with long gaps, " + caps)
     Cycles(end, weekendWorkMinutes, weekendBreakMinutes)
     return true
 }
@@ -221,6 +356,7 @@ func QuietDay(label) {
         return false
     }
     Notify("report", "🛋️ " + label + ": quiet day, " + n + " short look(s) between " + Hhmm(from) + " and " + Hhmm(to))
+    PickCaps(true)
     slot = IntDiv(to - from, n)
     for i = 0; i < n; i++ {
         slotEnd = from + (i + 1) * slot
@@ -230,7 +366,6 @@ func QuietDay(label) {
         }
         WaitUntil(at)
         Work(quietWorkMinutes, slotEnd - SecOfDay())
-        PauseFarmingBot()
     }
     return true
 }
@@ -241,6 +376,13 @@ Notify("report", "▶️ farmSchedule started: server time " + Hhmm(SecOfDay()) 
 for {
     workedSecs = 0
     longBreakAt = 0
+    dayAttacks = 0
+    dayCap = 0
+    seenFleets = {}
+    daySpies = 0
+    daySpyCap = 0
+    seenReports = {}
+    reportsReady = false
     dow = DayOfWeek()
     played = false
     if dow == 0 || dow == 6 {
@@ -254,7 +396,7 @@ for {
     // --- Night: farmer paused until tomorrow ---
     PauseFarmingBot()
     if played {
-        Notify("report", "😴 Day finished at " + Hhmm(SecOfDay()) + ", farmed " + ShortDur(workedSecs) + ". Farming paused until tomorrow")
+        Notify("report", "😴 Day finished at " + Hhmm(SecOfDay()) + ", farmed " + ShortDur(workedSecs) + ": " + dayAttacks + " raids, " + daySpies + " espionages. Farming paused until tomorrow")
     }
     // Wake a few minutes after midnight; the next day then waits for its own start time
     SleepSecs(86400 - SecOfDay() + Random(60, 600))

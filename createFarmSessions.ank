@@ -28,7 +28,7 @@ timezoneOffsetHours = 1         // server time minus UTC
 // Settings of every session
 probes = 10
 additionalCargo = 10            // percent, 0-50
-minimumResourcesToAttack = 3000000
+minimumResourcesToAttack = 4000000
 minimumPlayerRank = 0           // 0 = no limit
 deleteReports = false           // true = delete the espionage and combat reports of the farm
 
@@ -40,8 +40,16 @@ majorityMinWait = 3             // minutes
 majorityMaxWait = 12            // minutes
 
 // Pause between two raids of a wave, in seconds (min at least 2). Picked at random for every session.
-attackDelayMin = [3, 6]         // the session's minimum pause is picked between these
-attackDelayMax = [10, 25]       // the session's maximum pause is picked between these
+// A person sending by hand (read report, click, send) needs ~15-40 s per raid.
+attackDelayMin = [8, 15]        // the session's minimum pause is picked between these
+attackDelayMax = [25, 50]       // the session's maximum pause is picked between these
+
+// Farmer pace (all sessions), picked again every day. Milliseconds.
+spyDelayMin = [1500, 3000]      // pause between two espionages: min picked between these...
+spyDelayMax = [4000, 8000]      // ...and max picked between these
+systemDelayMin = [2000, 4000]   // pause when moving to the next system
+systemDelayMax = [5000, 10000]
+farmMaxSlots = [6, 10]          // fleet slots the farmer may use, picked every day ([0, 0] = leave as it is)
 
 //////////////////////////////////////
 // COMMON (same block in every script)
@@ -292,12 +300,44 @@ func SessionState(id) {
     return ""
 }
 
+// A slightly different pace every day, like a person who is quicker on some days than others
+func SetDailyPace() {
+    spyMin = Random(spyDelayMin[0], spyDelayMin[1])
+    spyMax = Random(spyDelayMax[0], spyDelayMax[1])
+    sysMin = Random(systemDelayMin[0], systemDelayMin[1])
+    sysMax = Random(systemDelayMax[0], systemDelayMax[1])
+    if spyMax < spyMin {
+        spyMax = spyMin
+    }
+    if sysMax < sysMin {
+        sysMax = sysMin
+    }
+    pace = "spy " + spyMin + "-" + spyMax + " ms, system " + sysMin + "-" + sysMax + " ms"
+    try {
+        SetFarmingBotConfigs({"SpyDelayMin": spyMin, "SpyDelayMax": spyMax, "SystemDelayMin": sysMin, "SystemDelayMax": sysMax})
+    } catch e {
+        Notify("warn", "Could not set the farmer pace: " + e)
+        pace = "default pace"
+    }
+    if farmMaxSlots[1] > 0 {
+        slots = Random(farmMaxSlots[0], farmMaxSlots[1])
+        try {
+            SetFarmMaxSlots(slots)
+            pace = pace + ", " + slots + " slots"
+        } catch e {
+            Notify("warn", "Could not set the farmer slots: " + e)
+        }
+    }
+    return pace
+}
+
 func CreateAll() {
     // A new session only raids if the farmer is on, so switch it off first. StopAllFarmSessions also
     // empties the queue and drops any paused progress; campaigns stay in the list (ours are deleted next).
     StopFarmingBot()
     StopAllFarmSessions()
     Sleep(Random(2000, 5000))
+    pace = SetDailyPace()
     deleted = DeleteOldSessions()
     chunks = PlanSessions()
     ids = []
@@ -334,7 +374,7 @@ func CreateAll() {
     }
     Notify("info", "Re-queued " + requeued + " campaigns that the farmer had started")
 
-    msg = "🌾 Farm sessions: " + deleted + " deleted, " + created + " created (" + queued + " waiting), " + failed + " failed"
+    msg = "🌾 Farm sessions: " + deleted + " deleted, " + created + " created (" + queued + " waiting), " + failed + " failed | " + pace
     if startAfterCreate && created > 0 {
         StartFarmingBot()
         msg = msg + " | farming started"
